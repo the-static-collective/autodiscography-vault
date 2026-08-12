@@ -87,6 +87,9 @@ export function validateReceipt(input) {
       throw new Error('verified receipt requires byteLength and sha256');
     }
   } else {
+    if (input.byteLength !== undefined || input.sha256 !== undefined) {
+      throw new Error('non-verified receipt cannot carry byteLength or sha256');
+    }
     if (typeof input.reasonCode !== 'string' || !REASON_CODE.test(input.reasonCode)) {
       throw new Error('non-verified receipt requires reasonCode');
     }

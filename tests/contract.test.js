@@ -52,3 +52,16 @@ test('validated receipt is frozen', () => {
   const receipt = validateReceipt({ ...base, byteLength: 3, sha256: 'a'.repeat(64) });
   assert.equal(Object.isFrozen(receipt), true);
 });
+
+test('non-verified receipt cannot carry admitted asset hash or byte length', () => {
+  assert.throws(
+    () => validateReceipt({
+      ...base,
+      state: 'partial',
+      reasonCode: 'interrupted',
+      byteLength: 3,
+      sha256: 'a'.repeat(64),
+    }),
+    /non-verified receipt cannot carry byteLength or sha256/,
+  );
+});
