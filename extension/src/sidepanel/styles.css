@@ -1,0 +1,40 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+  line-height: 1.45;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  padding: 1rem;
+}
+
+.eyebrow {
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.boundary,
+.gate,
+article {
+  border: 1px solid currentColor;
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+}
+
+.boundary {
+  font-weight: 700;
+}
+
+article + article {
+  margin-top: 0.75rem;
+}
+
+button {
+  width: 100%;
+  padding: 0.65rem;
+}
