@@ -1,0 +1,13 @@
+{
+  "name": "autodiscography-vault",
+  "version": "0.1.0-phase-a",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "synthetic:pilot": "node scripts/synthetic-pilot.js"
+  }
+}
