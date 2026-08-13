@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Autodiscography Vault — Phase A",
+  "version": "0.1.0",
+  "description": "Synthetic-only local preservation shell. Live provider acquisition is locked in Phase A.",
+  "permissions": ["sidePanel"],
+  "side_panel": {
+    "default_path": "src/sidepanel/index.html"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "fixture": true,
+  "provider": "suno",
+  "observedAt": "2026-08-12T00:00:00.000Z",
+  "tracks": [
+    {
+      "providerTrackId": "synthetic-track-alpha",
+      "title": "Synthetic Alpha",
+      "availableRoles": ["audio_mp3", "lyrics", "raw_metadata"]
+    },
+    {
+      "providerTrackId": "synthetic-track-beta",
+      "title": "Synthetic Beta",
+      "availableRoles": ["artwork", "raw_metadata"],
+      "missingRoles": ["lyrics"]
+    }
+  ]
+}
