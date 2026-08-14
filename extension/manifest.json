@@ -1,10 +1,23 @@
 {
   "manifest_version": 3,
-  "name": "Autodiscography Vault — Phase A",
-  "version": "0.1.0",
-  "description": "Synthetic-only local preservation shell. Live provider acquisition is locked in Phase A.",
+  "name": "Autodiscography Vault — Phase B1",
+  "version": "0.2.0",
+  "description": "Local-first Suno live witness and 25-track proposal instrument. Asset transport remains disabled.",
   "permissions": ["sidePanel"],
   "side_panel": {
     "default_path": "src/sidepanel/index.html"
-  }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://suno.com/*",
+        "https://www.suno.com/*"
+      ],
+      "js": [
+        "src/provider/suno/live-observer.js",
+        "src/provider/suno/content-script.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
 }
