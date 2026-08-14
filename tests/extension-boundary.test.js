@@ -6,13 +6,28 @@ async function text(path) {
   return readFile(new URL(path, import.meta.url), 'utf8');
 }
 
-test('MV3 shell has no live-origin or cookie authority', async () => {
+test('MV3 Phase B1 authority is permanent but Suno-only', async () => {
   const manifest = JSON.parse(await text('../extension/manifest.json'));
   assert.equal(manifest.manifest_version, 3);
   assert.equal('host_permissions' in manifest, false);
-  assert.equal((manifest.permissions ?? []).includes('cookies'), false);
   assert.deepEqual(manifest.permissions, ['sidePanel']);
   assert.equal(manifest.side_panel.default_path, 'src/sidepanel/index.html');
+
+  assert.equal(Array.isArray(manifest.content_scripts), true);
+  assert.equal(manifest.content_scripts.length, 1);
+  assert.deepEqual(manifest.content_scripts[0].matches, [
+    'https://suno.com/*',
+    'https://www.suno.com/*',
+  ]);
+  assert.deepEqual(manifest.content_scripts[0].js, [
+    'src/provider/suno/live-observer.js',
+    'src/provider/suno/content-script.js',
+  ]);
+
+  const serialized = JSON.stringify(manifest);
+  for (const forbidden of ['cookies', 'webRequest', 'declarativeNetRequest', '<all_urls>']) {
+    assert.equal(serialized.includes(forbidden), false, `manifest must not request ${forbidden}`);
+  }
 });
 
 test('fixture adapter contains no network or browser-session primitive', async () => {
@@ -20,9 +35,9 @@ test('fixture adapter contains no network or browser-session primitive', async (
   assert.equal(/\bfetch\s*\(|XMLHttpRequest|WebSocket|chrome\.cookies|document\.cookie|authorization/i.test(adapter), false);
 });
 
-test('side panel permanently declares the Phase-A lock', async () => {
-  const html = await text('../extension/src/sidepanel/index.html');
-  assert.match(html, /SYNTHETIC ONLY/);
-  assert.match(html, /Locked until Phase-A receipt passes/);
-  assert.match(html, /disabled/);
+test('Phase B1 content script contains no network interception or cookie primitive', async () => {
+  const contentScript = await text('../extension/src/provider/suno/content-script.js');
+  const observer = await text('../extension/src/provider/suno/live-observer.js');
+  const source = `${contentScript}\n${observer}`;
+  assert.equal(/\bfetch\s*\(|XMLHttpRequest|WebSocket|chrome\.cookies|document\.cookie|webRequest/i.test(source), false);
 });
