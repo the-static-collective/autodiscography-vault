@@ -23,7 +23,7 @@ test('wrong origin refuses before candidate processing', () => {
   });
   assert.equal(result.status, 'refused');
   assert.equal(result.reasonCode, 'wrong_origin');
-  assert.deepEqual(result.tracks, []);
+  assert.equal(result.tracks.length, 0);
 });
 
 test('live observation is deterministically capped at 25 tracks', () => {
