@@ -1,6 +1,6 @@
 # Pilot Runbook
 
-## Phase A — runnable now
+## Phase A — preservation floor
 
 Phase A proves the preservation mechanics with synthetic fixtures only.
 
@@ -29,8 +29,7 @@ The test suite must prove:
 - a torn/non-newline-terminated journal fails closed;
 - missing/partial states remain explicit;
 - raw metadata references stay separate from derived asset records;
-- the MV3 shell has no live-origin/cookie authority;
-- the fixture adapter has no network primitive.
+- the fixture adapter has no provider network primitive.
 
 The synthetic pilot must demonstrate:
 
@@ -43,15 +42,56 @@ The synthetic pilot must demonstrate:
 7. independent re-verification of the final file;
 8. a second pass that skips the already verified final only after matching its receipt.
 
-If any proof fails, Phase B remains locked.
+If any proof fails, live transport remains locked.
 
-## Phase B — 25-track live pilot, not implemented here
+## Phase B1 — live Suno witness/proposal
 
-Only after Phase A is green may a separate change propose live provider behavior.
+Phase B1 is implemented as a provider-specific, read-only content script. **It does not download provider assets.**
 
-The live pilot must be capped at **25 tracks** and must let the operator inspect exactly what will be requested and written before acquisition begins.
+### Load the local extension
 
-The pilot receipt must prove:
+1. Obtain the reviewed Phase-B1 branch/merge candidate.
+2. In a Chromium browser, open `chrome://extensions`.
+3. Enable Developer mode.
+4. Choose **Load unpacked** and select the repository's `extension/` directory.
+5. Confirm the requested site access is limited to Suno HTTPS origins. Do not approve any cookie, all-sites, request-interception, or browser-data authority.
+
+### Run the live witness
+
+1. Sign in normally at the real Suno site. Vault never renders or proxies login.
+2. Open the Suno library/page that presents your own tracks.
+3. Open the Autodiscography Vault side panel.
+4. Press **Refresh live witness**.
+5. Confirm the panel reports at most **25** candidates.
+6. Inspect several candidates. Record only structural findings:
+   - whether provider track IDs are present;
+   - which stable source URLs are visible;
+   - whether titles are visible;
+   - what page shapes/selectors appear stable;
+   - whether legitimate asset URLs or provider metadata are visibly available without extracting reusable authentication material.
+7. Confirm **Acquire 25-track pilot** remains disabled.
+
+### Required Phase-B1 evidence
+
+The witness passes when:
+
+- the content script operates only on `https://suno.com/*` or `https://www.suno.com/*`;
+- at most 25 candidates are returned;
+- unknown provider IDs remain `unknown`/`null`, not synthesized;
+- additional candidates produce `pilot_cap_reached` rather than silently widening the pilot;
+- no cookies, bearer tokens, authorization headers, browser databases, session IDs, or other reusable authentication material appear in the panel, logs, extension storage, or any local output;
+- no asset transport occurs;
+- the operator can describe the actual provider surface well enough to design Phase B2 from evidence rather than guesses.
+
+If the observed page shape is unsupported, preserve `unsupported_page_shape` as evidence and revise the observer narrowly. If any apparently necessary transport mechanism requires reusable authentication extraction, record `reusable_auth_required` and stop.
+
+## Phase B2 — 25-track transport pilot, not yet admitted
+
+Only after the Phase-B1 live witness may a separate reviewed change propose actual acquisition.
+
+The eventual transport pilot remains capped at **25 tracks** and must let the operator inspect exactly what will be requested and written before acquisition begins.
+
+Its receipt must eventually prove:
 
 1. login occurs only on the real provider origin;
 2. no password, cookie, bearer token, authorization header, browser database, or reusable session material enters destination files, journal, manifest, logs, or extension storage;
@@ -64,7 +104,7 @@ The pilot receipt must prove:
 9. the Corpus OS handoff manifest validates against the bounded handoff contract;
 10. a second-device copy verifies from the manifest.
 
-Only after the 25-track receipt passes should full-corpus preservation begin.
+Only after that 25-track transport receipt passes should full-corpus preservation begin.
 
 ## External deadline
 
