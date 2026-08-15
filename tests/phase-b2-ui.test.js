@@ -25,6 +25,8 @@ test('Phase B2 side panel requests downloads permission only from the extension 
   assert.match(js, /Autodiscography-Vault/);
   assert.match(js, /requestDescriptorSha256/);
   assert.match(js, /transportUrl/);
+  assert.match(js, /observedAt/);
+  assert.match(js, /Observed at/);
 
   for (const forbidden of [
     /chrome\.storage/,
