@@ -5,6 +5,12 @@
   "description": "Local-first Suno witness with explicit one-track pilot transport into exact local admission.",
   "permissions": ["sidePanel"],
   "optional_permissions": ["downloads"],
+  "action": {
+    "default_title": "Open Autodiscography Vault"
+  },
+  "background": {
+    "service_worker": "src/background.js"
+  },
   "side_panel": {
     "default_path": "src/sidepanel/index.html"
   },
