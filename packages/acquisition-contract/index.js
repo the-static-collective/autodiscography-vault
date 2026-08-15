@@ -29,6 +29,7 @@ const ALLOWED_FIELDS = new Set([
   'reasonCode',
   'rawMetadataPath',
   'rawMetadataSha256',
+  'requestDescriptorSha256',
 ]);
 
 const SECRET_FIELD = /(authorization|cookie|password|token|secret|session)/i;
@@ -97,6 +98,9 @@ export function validateReceipt(input) {
 
   if (input.sha256 !== undefined && !SHA256_HEX.test(input.sha256)) throw new Error('sha256 must be lowercase hex');
   if (input.rawMetadataSha256 !== undefined && !SHA256_HEX.test(input.rawMetadataSha256)) throw new Error('rawMetadataSha256 must be lowercase hex');
+  if (input.requestDescriptorSha256 !== undefined && !SHA256_HEX.test(input.requestDescriptorSha256)) {
+    throw new Error('requestDescriptorSha256 must be lowercase hex');
+  }
 
   return Object.freeze({ ...input });
 }
