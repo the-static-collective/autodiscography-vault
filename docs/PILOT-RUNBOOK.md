@@ -38,6 +38,7 @@ After refreshing the live witness, choose one track with:
 - a real provider track ID;
 - an enriched/credible title where available;
 - at least one `observedAssets` entry;
+- a displayed observation timestamp;
 - a displayed redacted request preview and 64-hex request descriptor hash.
 
 The preview must contain origin + pathname, provider, track, and asset role. It must not show URL query/fragment material.
@@ -53,6 +54,7 @@ Do not approve cookie, all-sites, request-interception, browser-database, or Nat
 Press the stage button for exactly one observed asset. Record the safe values shown by the panel:
 
 - run ID;
+- original observation timestamp (`observedAt`);
 - provider track ID;
 - asset role;
 - request descriptor SHA-256;
@@ -78,7 +80,7 @@ npm run pilot:admit -- \
   --run-id <run-id> \
   --provider-track-id <provider-track-id> \
   --asset-role <asset-role> \
-  --observed-at <YYYY-MM-DDTHH:MM:SS.sssZ> \
+  --observed-at <observedAt-shown-by-extension> \
   --request-descriptor-sha256 <64-hex-hash>
 ```
 
@@ -97,6 +99,7 @@ npm run pilot:admit -- \
 
 The specimen passes only when:
 
+- the receipt preserves the exact observation timestamp shown before staging;
 - final byte length and SHA-256 match the receipt;
 - handoff contains provider ID, asset role, local path, exact byte identity, and `requestDescriptorSha256`;
 - journal/handoff contain no `transportUrl` field;
