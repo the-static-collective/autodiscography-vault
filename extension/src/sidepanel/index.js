@@ -113,6 +113,7 @@ function renderLiveObservation(observation) {
     const heading = document.createElement('h3');
     heading.textContent = track.title ?? 'unknown title';
     article.append(heading);
+    appendField(article, 'Observed at', observation.observedAt ?? 'unknown');
     appendField(article, 'Provider track ID', track.providerTrackId ?? 'unknown');
     appendField(article, 'Source URL', track.sourceUrl ?? 'unknown');
     appendField(article, 'Proposed assets', Array.isArray(track.proposedAssets) ? track.proposedAssets.join(', ') : 'unknown');
@@ -182,6 +183,11 @@ async function stageObservedAsset(track, asset) {
     transportStatus.textContent = 'Transport refused: observed asset lacks exact provider/request evidence.';
     return;
   }
+  const observedAt = latestObservation?.observedAt;
+  if (!observedAt) {
+    transportStatus.textContent = 'Transport refused: live witness has no observation timestamp. Refresh live witness first.';
+    return;
+  }
   if (selectedProviderTrackId && selectedProviderTrackId !== track.providerTrackId) {
     transportStatus.textContent = `Transport refused: this Phase B2 session is already bound to provider track ${selectedProviderTrackId}.`;
     return;
@@ -209,10 +215,11 @@ async function stageObservedAsset(track, asset) {
       runId: currentRunId,
       providerTrackId: track.providerTrackId,
       assetRole: asset.assetRole,
+      observedAt,
       requestDescriptorSha256: asset.requestDescriptorSha256,
       filename,
     });
-    transportStatus.textContent = `Staging run ${currentRunId}; track ${track.providerTrackId}; role ${asset.assetRole}; request ${asset.requestDescriptorSha256}; Chrome download ${downloadId}.`;
+    transportStatus.textContent = `Staging run ${currentRunId}; Observed at ${observedAt}; track ${track.providerTrackId}; role ${asset.assetRole}; request ${asset.requestDescriptorSha256}; Chrome download ${downloadId}.`;
     renderLiveObservation(latestObservation);
   } catch {
     activeDownload = null;
@@ -227,7 +234,7 @@ function observeDownloadChanges(delta) {
   if (delta.state.current === 'complete') {
     const completed = activeDownload;
     activeDownload = null;
-    transportStatus.textContent = `Staged: ${completed.filename}. Run ${completed.runId}; track ${completed.providerTrackId}; role ${completed.assetRole}; request ${completed.requestDescriptorSha256}. Admit these local bytes with pilot:admit.`;
+    transportStatus.textContent = `Staged: ${completed.filename}. Run ${completed.runId}; Observed at ${completed.observedAt}; track ${completed.providerTrackId}; role ${completed.assetRole}; request ${completed.requestDescriptorSha256}. Admit these local bytes with pilot:admit.`;
     renderLiveObservation(latestObservation);
   } else if (delta.state.current === 'interrupted') {
     activeDownload = null;
