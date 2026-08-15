@@ -1,9 +1,10 @@
 {
   "manifest_version": 3,
-  "name": "Autodiscography Vault — Phase B1",
-  "version": "0.2.0",
-  "description": "Local-first Suno live witness and 25-track proposal instrument. Asset transport remains disabled.",
+  "name": "Autodiscography Vault — Phase B2",
+  "version": "0.3.0",
+  "description": "Local-first Suno witness with explicit one-track pilot transport into exact local admission.",
   "permissions": ["sidePanel"],
+  "optional_permissions": ["downloads"],
   "side_panel": {
     "default_path": "src/sidepanel/index.html"
   },
