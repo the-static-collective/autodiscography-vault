@@ -9,19 +9,26 @@
 <body>
   <main>
     <header>
-      <p class="eyebrow">Autodiscography Vault · Phase B1</p>
-      <h1>Live witness</h1>
-      <p class="boundary">LIVE WITNESS ONLY — transport disabled. Suno observation is capped at 25 tracks and never grants cookie/session authority.</p>
+      <p class="eyebrow">Autodiscography Vault · Phase B2</p>
+      <h1>Live witness + one-track pilot</h1>
+      <p class="boundary">LIVE WITNESS BY DEFAULT — browser transport is optional, user-granted, and limited to one observed asset. Cookie/session export remains forbidden.</p>
     </header>
 
     <section class="gate" aria-labelledby="live-heading">
       <h2 id="live-heading">25-track live proposal</h2>
-      <p>Observe the currently active signed-in Suno page. Vault will show only what it can honestly witness from the page and will not acquire assets in Phase B1.</p>
+      <p>Observe the currently active signed-in Suno page. Vault distinguishes proposed asset roles from transport surfaces the page actually exposes.</p>
       <button id="refresh-live" type="button">Refresh live witness</button>
       <p id="live-status" role="status" aria-live="polite">Not observed yet.</p>
       <p id="live-count">0 / 25 observed</p>
       <div id="live-tracks" aria-live="polite"></div>
-      <button id="acquire-pilot" type="button" disabled>Acquire 25-track pilot — transport disabled pending Phase B2 review</button>
+    </section>
+
+    <section class="gate" aria-labelledby="transport-heading">
+      <h2 id="transport-heading">One-track pilot transport</h2>
+      <p>Transport stays locked until you grant Chrome's downloads capability from this explicit action. Exact signed URLs remain ephemeral in browser memory.</p>
+      <button id="enable-transport" type="button">Enable pilot transport</button>
+      <p id="transport-status" role="status" aria-live="polite">Transport locked. Observation remains available.</p>
+      <button id="acquire-pilot" type="button" disabled>Acquire 25-track pilot — 25-track transport remains locked pending one-track witness</button>
     </section>
 
     <section aria-labelledby="proposal-heading">
