@@ -31,6 +31,16 @@ test('MV3 Phase B2 keeps transport optional and Suno witness permanent', async (
   }
 });
 
+test('toolbar action explicitly opens the registered Vault side panel', async () => {
+  const manifest = JSON.parse(await text('../extension/manifest.json'));
+  assert.equal(manifest.action.default_title, 'Open Autodiscography Vault');
+  assert.equal(manifest.background.service_worker, 'src/background.js');
+
+  const background = await text('../extension/src/background.js');
+  assert.match(background, /chrome\.sidePanel\.setPanelBehavior\s*\(\s*\{\s*openPanelOnActionClick:\s*true\s*\}\s*\)/);
+  assert.equal(/fetch\s*\(|chrome\.downloads|chrome\.cookies|webRequest|document\.cookie/i.test(background), false);
+});
+
 test('fixture adapter contains no network or browser-session primitive', async () => {
   const adapter = await text('../extension/src/provider/suno/fixture-adapter.js');
   assert.equal(/\bfetch\s*\(|XMLHttpRequest|WebSocket|chrome\.cookies|document\.cookie|authorization/i.test(adapter), false);
