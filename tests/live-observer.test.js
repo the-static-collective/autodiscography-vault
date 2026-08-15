@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
@@ -12,6 +13,30 @@ function loadObserver() {
   vm.runInNewContext(source, context, { filename: 'live-observer.js' });
   assert.equal(typeof context.AutodiscographyVaultSuno?.buildLiveObservation, 'function');
   return context.AutodiscographyVaultSuno;
+}
+
+function element({ tagName, attributes = {}, textContent = '', children = [] } = {}) {
+  const attrs = new Map(Object.entries(attributes));
+  return {
+    tagName,
+    textContent,
+    href: attributes.href,
+    src: attributes.src,
+    getAttribute(name) {
+      return attrs.get(name) ?? null;
+    },
+    matches(selector) {
+      return selector === 'a[href]' && tagName === 'A' && attrs.has('href');
+    },
+    querySelector(selector) {
+      if (selector === 'a[href]') return children.find(child => child.tagName === 'A' && child.getAttribute('href')) ?? null;
+      if (selector.includes('title')) return children.find(child => child.getAttribute('data-testid') === 'title') ?? null;
+      return null;
+    },
+    querySelectorAll() {
+      return children.filter(child => ['AUDIO', 'SOURCE', 'IMG', 'A'].includes(child.tagName));
+    },
+  };
 }
 
 test('wrong origin refuses before candidate processing', () => {
@@ -73,4 +98,82 @@ test('secret-shaped evidence refuses without echoing the value', () => {
   assert.equal(result.status, 'refused');
   assert.equal(result.reasonCode, 'reusable_auth_required');
   assert.equal(JSON.stringify(result).includes(secret), false);
+});
+
+test('duplicate provider witnesses aggregate richer title and visible asset surfaces before capping', () => {
+  const observer = loadObserver();
+  const songUrl = 'https://suno.com/song/track-alpha';
+  const sparseAnchor = element({ tagName: 'A', attributes: { href: songUrl } });
+  const sparse = element({
+    tagName: 'DIV',
+    attributes: { 'data-song-id': 'track-alpha' },
+    children: [sparseAnchor],
+  });
+
+  const richAnchor = element({ tagName: 'A', attributes: { href: songUrl }, textContent: 'A Real Title' });
+  const audioUrl = 'https://cdn.example.test/track-alpha.mp3?token=ephemeral-secret#player';
+  const imageUrl = 'https://img.example.test/track-alpha.jpg?sig=ephemeral-secret';
+  const rich = element({
+    tagName: 'DIV',
+    attributes: { 'data-song-id': 'track-alpha', 'data-title': 'A Real Title' },
+    children: [
+      richAnchor,
+      element({ tagName: 'AUDIO', attributes: { src: audioUrl, type: 'audio/mpeg' } }),
+      element({ tagName: 'IMG', attributes: { src: imageUrl } }),
+    ],
+  });
+
+  const documentLike = {
+    querySelectorAll() {
+      return [sparse, rich];
+    },
+  };
+
+  const extracted = observer.extractSunoCandidates(documentLike);
+  assert.equal(extracted.candidateNodeCount, 2);
+  assert.equal(extracted.candidates.length, 1);
+  assert.equal(extracted.candidates[0].providerTrackId, 'track-alpha');
+  assert.equal(extracted.candidates[0].title, 'A Real Title');
+  assert.equal(extracted.candidates[0].observedAssets.length, 2);
+
+  const audio = extracted.candidates[0].observedAssets.find(asset => asset.assetRole === 'audio_mp3');
+  assert.equal(audio.transportUrl, audioUrl);
+  assert.equal(audio.requestPreview, 'GET https://cdn.example.test/track-alpha.mp3\nprovider=suno\ntrack=track-alpha\nasset=audio_mp3');
+  assert.equal(audio.requestPreview.includes('ephemeral-secret'), false);
+  assert.equal(
+    audio.requestDescriptorSha256,
+    createHash('sha256').update(audio.requestPreview, 'utf8').digest('hex'),
+  );
+
+  const observation = observer.buildLiveObservation({
+    origin: 'https://suno.com',
+    candidates: extracted.candidates,
+    candidateNodeCount: extracted.candidateNodeCount,
+    observedAt: '2026-08-15T19:00:00.000Z',
+  });
+  assert.equal(observation.status, 'ready');
+  assert.equal(observation.tracks[0].title, 'A Real Title');
+  assert.equal(observation.tracks[0].observedAssets.length, 2);
+});
+
+test('aggregation happens before the 25-track cap', () => {
+  const observer = loadObserver();
+  const nodes = [];
+  for (let index = 1; index <= 25; index += 1) {
+    nodes.push(element({
+      tagName: 'A',
+      attributes: { href: `https://suno.com/song/track-${index}`, 'data-song-id': `track-${index}` },
+      textContent: index === 1 ? '' : `Track ${index}`,
+    }));
+  }
+  nodes.push(element({
+    tagName: 'A',
+    attributes: { href: 'https://suno.com/song/track-1', 'data-song-id': 'track-1', 'data-title': 'Track One Enriched' },
+    textContent: 'Track One Enriched',
+  }));
+
+  const extracted = observer.extractSunoCandidates({ querySelectorAll: () => nodes });
+  assert.equal(extracted.candidateNodeCount, 26);
+  assert.equal(extracted.candidates.length, 25);
+  assert.equal(extracted.candidates[0].title, 'Track One Enriched');
 });
