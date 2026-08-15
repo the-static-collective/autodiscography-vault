@@ -1,110 +1,114 @@
 # Pilot Runbook
 
-## Phase A — preservation floor
+## Automated preservation floor
 
-Phase A proves the preservation mechanics with synthetic fixtures only.
-
-### Prerequisites
-
-- Node.js 22 or newer;
-- a clean checkout of the Vault repository;
-- no real provider data placed inside the repository.
-
-### Run
+Requires Node.js 22 or newer and a clean checkout with no real provider corpus material committed to Git.
 
 ```bash
+npm ci
 npm test
 npm run synthetic:pilot
 ```
 
-### Required Phase-A evidence
+The automated suite must prove receipt validation, secret refusal, exact SHA-256/byte length, corruption detection, append-only/torn-journal behavior, explicit incomplete states, read-only provider observation, duplicate-witness enrichment, optional-only browser transport authority, request redaction, staged-byte admission, idempotent resume, and the existing synthetic interruption/promotion proof.
 
-The test suite must prove:
+Any failure keeps live transport below the pilot gate.
 
-- bounded receipt validation;
-- secret-shaped fields and values fail closed without echoing the value;
-- exact known SHA-256 and byte length;
-- one-byte corruption is detected;
-- append operations preserve prior journal history;
-- a torn/non-newline-terminated journal fails closed;
-- missing/partial states remain explicit;
-- raw metadata references stay separate from derived asset records;
-- the fixture adapter has no provider network primitive.
+## Phase B1 — live witness floor
 
-The synthetic pilot must demonstrate:
+1. Load `extension/` unpacked in a Chromium browser.
+2. Sign in normally at the real Suno origin.
+3. Open the page/library presenting your tracks.
+4. Open the Vault side panel and press **Refresh live witness**.
+5. Confirm no more than 25 grouped candidates are shown.
+6. Confirm sparse duplicate witnesses are enriched where richer title/source evidence exists.
+7. Confirm proposed roles are separate from `observedAssets`.
+8. Confirm no cookie, token, header, session, browser database, or other reusable authentication material is displayed or persisted.
 
-1. raw metadata admitted by exact bytes;
-2. an intentionally interrupted audio state recorded as `partial`;
-3. a complete local fixture written to `.partial`;
-4. exact verification before atomic promotion;
-5. a later `verified` receipt appended for the same logical key;
-6. an explicit `missing` asset on a different synthetic track;
-7. independent re-verification of the final file;
-8. a second pass that skips the already verified final only after matching its receipt.
+If the page shape is unsupported, preserve `unsupported_page_shape`. If the apparently necessary transport path requires reusable authentication extraction, preserve `reusable_auth_required` and stop.
 
-If any proof fails, live transport remains locked.
+## Phase B2 — one-track browser transport specimen
 
-## Phase B1 — live Suno witness/proposal
+**This is the current human gate. Do not use the disabled 25-track acquisition control.**
 
-Phase B1 is implemented as a provider-specific, read-only content script. **It does not download provider assets.**
+### 1. Select real observed evidence
 
-### Load the local extension
+After refreshing the live witness, choose one track with:
 
-1. Obtain the reviewed Phase-B1 branch/merge candidate.
-2. In a Chromium browser, open `chrome://extensions`.
-3. Enable Developer mode.
-4. Choose **Load unpacked** and select the repository's `extension/` directory.
-5. Confirm the requested site access is limited to Suno HTTPS origins. Do not approve any cookie, all-sites, request-interception, or browser-data authority.
+- a real provider track ID;
+- an enriched/credible title where available;
+- at least one `observedAssets` entry;
+- a displayed observation timestamp;
+- a displayed redacted request preview and 64-hex request descriptor hash.
 
-### Run the live witness
+The preview must contain origin + pathname, provider, track, and asset role. It must not show URL query/fragment material.
 
-1. Sign in normally at the real Suno site. Vault never renders or proxies login.
-2. Open the Suno library/page that presents your own tracks.
-3. Open the Autodiscography Vault side panel.
-4. Press **Refresh live witness**.
-5. Confirm the panel reports at most **25** candidates.
-6. Inspect several candidates. Record only structural findings:
-   - whether provider track IDs are present;
-   - which stable source URLs are visible;
-   - whether titles are visible;
-   - what page shapes/selectors appear stable;
-   - whether legitimate asset URLs or provider metadata are visibly available without extracting reusable authentication material.
-7. Confirm **Acquire 25-track pilot** remains disabled.
+### 2. Grant transport explicitly
 
-### Required Phase-B1 evidence
+Press **Enable pilot transport**. Grant only Chrome's Downloads permission.
 
-The witness passes when:
+Do not approve cookie, all-sites, request-interception, browser-database, or Native Messaging authority.
 
-- the content script operates only on `https://suno.com/*` or `https://www.suno.com/*`;
-- at most 25 candidates are returned;
-- unknown provider IDs remain `unknown`/`null`, not synthesized;
-- additional candidates produce `pilot_cap_reached` rather than silently widening the pilot;
-- no cookies, bearer tokens, authorization headers, browser databases, session IDs, or other reusable authentication material appear in the panel, logs, extension storage, or any local output;
-- no asset transport occurs;
-- the operator can describe the actual provider surface well enough to design Phase B2 from evidence rather than guesses.
+### 3. Stage exactly one asset
 
-If the observed page shape is unsupported, preserve `unsupported_page_shape` as evidence and revise the observer narrowly. If any apparently necessary transport mechanism requires reusable authentication extraction, record `reusable_auth_required` and stop.
+Press the stage button for exactly one observed asset. Record the safe values shown by the panel:
 
-## Phase B2 — 25-track transport pilot, not yet admitted
+- run ID;
+- original observation timestamp (`observedAt`);
+- provider track ID;
+- asset role;
+- request descriptor SHA-256;
+- Chrome download ID/state;
+- resulting staged relative path.
 
-Only after the Phase-B1 live witness may a separate reviewed change propose actual acquisition.
+Expected root:
 
-The eventual transport pilot remains capped at **25 tracks** and must let the operator inspect exactly what will be requested and written before acquisition begins.
+```text
+Downloads/Autodiscography-Vault/<run-id>/
+```
 
-Its receipt must eventually prove:
+If the download is interrupted, stop. No durable acquisition receipt exists yet.
 
-1. login occurs only on the real provider origin;
-2. no password, cookie, bearer token, authorization header, browser database, or reusable session material enters destination files, journal, manifest, logs, or extension storage;
-3. raw provider metadata is preserved separately from any derived projection;
-4. available MP3, artwork, lyrics, and metadata may succeed or fail independently;
-5. every verified final file has exact byte length and SHA-256;
-6. interruption is deliberate and resume does not rewrite verified originals;
-7. missing/partial/refused states are legible and safely rerunnable;
-8. duplicate IDs, alternate versions, and same-name/different-byte cases remain distinct;
-9. the Corpus OS handoff manifest validates against the bounded handoff contract;
-10. a second-device copy verifies from the manifest.
+### 4. Admit the local bytes
 
-Only after that 25-track transport receipt passes should full-corpus preservation begin.
+Run:
+
+```bash
+npm run pilot:admit -- \
+  --staged-file <path-to-staged-file> \
+  --vault-root <path-to-local-vault> \
+  --run-id <run-id> \
+  --provider-track-id <provider-track-id> \
+  --asset-role <asset-role> \
+  --observed-at <observedAt-shown-by-extension> \
+  --request-descriptor-sha256 <64-hex-hash>
+```
+
+`pilot:admit` must:
+
+1. validate all bounded inputs before journal mutation;
+2. verify the staged file;
+3. write a `0600` `.partial` final candidate;
+4. verify `.partial` before atomic promotion;
+5. append one `verified` receipt;
+6. write `receipts/handoff.json`;
+7. independently re-verify the final;
+8. skip a second identical admission only after the existing final matches its receipt.
+
+### 5. Inspect the witness
+
+The specimen passes only when:
+
+- the receipt preserves the exact observation timestamp shown before staging;
+- final byte length and SHA-256 match the receipt;
+- handoff contains provider ID, asset role, local path, exact byte identity, and `requestDescriptorSha256`;
+- journal/handoff contain no `transportUrl` field;
+- no exact signed URL, query/fragment, cookie, authorization header, bearer/session token, or browser-storage content appears in durable output;
+- a corrupted final is refused rather than overwritten.
+
+## Gate after the specimen
+
+Only after the one-track signed-in witness passes may the same mechanism be proposed for a bounded **25-track transport pilot**. The 25-track pilot must still prove independent asset outcomes, interruption/resume, duplicate/alternate preservation, bounded handoff validation, and second-copy verification before full-corpus preservation is opened.
 
 ## External deadline
 

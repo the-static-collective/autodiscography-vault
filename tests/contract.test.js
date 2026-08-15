@@ -65,3 +65,36 @@ test('non-verified receipt cannot carry admitted asset hash or byte length', () 
     /non-verified receipt cannot carry byteLength or sha256/,
   );
 });
+
+test('verified receipt may carry only the redacted request descriptor hash', () => {
+  const receipt = validateReceipt({
+    ...base,
+    byteLength: 3,
+    sha256: 'a'.repeat(64),
+    requestDescriptorSha256: 'b'.repeat(64),
+  });
+  assert.equal(receipt.requestDescriptorSha256, 'b'.repeat(64));
+});
+
+test('request descriptor hash must be lowercase SHA-256 and exact transport URLs remain forbidden', () => {
+  assert.throws(
+    () => validateReceipt({
+      ...base,
+      byteLength: 3,
+      sha256: 'a'.repeat(64),
+      requestDescriptorSha256: 'NOT-A-HASH',
+    }),
+    /requestDescriptorSha256 must be lowercase hex/,
+  );
+
+  assert.throws(
+    () => validateReceipt({
+      ...base,
+      byteLength: 3,
+      sha256: 'a'.repeat(64),
+      requestDescriptorSha256: 'b'.repeat(64),
+      transportUrl: 'https://cdn.example.test/file.mp3?token=reusable',
+    }),
+    /unknown receipt field: transportUrl/,
+  );
+});

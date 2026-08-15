@@ -24,7 +24,8 @@ section + section {
 
 .boundary,
 .gate,
-article {
+article,
+.observed-asset {
   border: 1px solid currentColor;
   border-radius: 0.5rem;
   padding: 0.75rem;
@@ -34,7 +35,12 @@ article {
   font-weight: 700;
 }
 
-article + article {
+article + article,
+.observed-asset + .observed-asset {
+  margin-top: 0.75rem;
+}
+
+.observed-asset {
   margin-top: 0.75rem;
 }
 
@@ -55,7 +61,12 @@ button[disabled] {
   opacity: 0.65;
 }
 
-#live-count {
+#live-count,
+#transport-status {
   font-variant-numeric: tabular-nums;
   font-weight: 700;
+}
+
+.observed-asset p {
+  overflow-wrap: anywhere;
 }

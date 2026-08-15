@@ -18,6 +18,7 @@ test('handoff keeps raw metadata reference separate from derived asset record', 
       sha256: 'a'.repeat(64),
       rawMetadataPath: 'raw/library.json',
       rawMetadataSha256: 'b'.repeat(64),
+      requestDescriptorSha256: 'c'.repeat(64),
     }],
   });
 
@@ -26,6 +27,8 @@ test('handoff keeps raw metadata reference separate from derived asset record', 
   assert.equal(manifest.records[0].rawMetadata.sha256, 'b'.repeat(64));
   assert.equal(manifest.records[0].asset.sha256, 'a'.repeat(64));
   assert.equal(manifest.records[0].providerTrackId, 't1');
+  assert.equal(manifest.records[0].requestDescriptorSha256, 'c'.repeat(64));
+  assert.equal(JSON.stringify(manifest).includes('transportUrl'), false);
 });
 
 test('handoff preserves explicit incomplete state rather than inventing bytes', () => {
@@ -47,4 +50,5 @@ test('handoff preserves explicit incomplete state rather than inventing bytes', 
   assert.equal(manifest.records[0].asset.byteLength, null);
   assert.equal(manifest.records[0].asset.sha256, null);
   assert.equal(manifest.records[0].reasonCode, 'not_available');
+  assert.equal(manifest.records[0].requestDescriptorSha256, null);
 });

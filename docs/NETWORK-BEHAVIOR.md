@@ -1,40 +1,70 @@
 # Network Behavior
 
-## Phase B1: provider-page witness, no asset transport
+## Phase B2: page witness plus one browser-held transport
 
-Phase B1 installs a permanent Manifest V3 content script only on:
+The permanent Manifest V3 content script remains limited to:
 
 - `https://suno.com/*`
 - `https://www.suno.com/*`
 
-The content script reads DOM-visible provider evidence when the Vault side panel explicitly asks for a live observation. It does not initiate provider requests and does not acquire MP3, artwork, lyrics, or raw metadata.
+It reads DOM-visible provider evidence only when the Vault side panel requests observation. It does not call `fetch`, `XMLHttpRequest`, `WebSocket`, cookie APIs, request-header interception APIs, or `chrome.downloads`.
 
 The extension manifest intentionally has:
 
+- required permission: `sidePanel` only;
+- optional permission: `downloads` only;
 - no `host_permissions` block;
-- no `cookies` permission;
-- no `webRequest` or `declarativeNetRequest` permission;
+- no `cookies`, `webRequest`, or `declarativeNetRequest` permission;
 - no `<all_urls>` match;
+- no Native Messaging;
 - no externally connectable surface;
-- no download permission;
 - no telemetry or server transport permission.
 
-The Phase-B1 content script and observer contain no `fetch`, `XMLHttpRequest`, `WebSocket`, cookie API, or request-header interception path. The browser's normal Suno page remains responsible for its own signed-in traffic; Vault observes only the rendered provider surface.
+## Observed transport surfaces
 
-## Bounded messaging
+Phase B2A characterizes only URLs already exposed through visible page media/link elements. A theoretical asset role is not treated as proof that a transport exists.
 
-The side panel sends only `{ type: "vault:observe" }` to the active tab. A Suno content script responds with a sanitized live observation capped at 25 candidates. If no Suno content script is reachable, the panel reports a bounded refusal rather than trying another origin.
+The exact observed transport URL may contain short-lived signed query material. It is retained only in the in-memory observation object for the immediate operator-selected download. The durable request preview strips query and fragment material before SHA-256 identity is computed.
 
-Secret-shaped evidence causes `reusable_auth_required`; the sensitive value is not returned to the panel.
+## Optional Downloads capability
+
+The side panel requests:
+
+```js
+chrome.permissions.request({ permissions: ['downloads'] })
+```
+
+only when the operator presses **Enable pilot transport**. Denial leaves live observation available and transport locked.
+
+After grant, one selected observed asset is passed directly to `chrome.downloads.download()` and staged under a relative Downloads path:
+
+```text
+Autodiscography-Vault/<run-id>/<providerTrackId>/<assetRole>.<ext>
+```
+
+The request does not add page-supplied headers, export cookies, or proxy through a Vault server. If Chrome cannot complete the download in the current browser session, the transport is treated as failed/interrupted rather than widening authority.
+
+## Durable boundary
+
+Chrome staging is not Vault admission. The local Node `pilot:admit` command begins the durable boundary from the staged file itself. It receives no exact transport URL and performs no provider network request.
+
+Durable records may contain:
+
+- provider and provider track ID;
+- asset role;
+- observation timestamp;
+- redacted `requestDescriptorSha256`;
+- local path;
+- exact byte length;
+- exact SHA-256;
+- explicit acquisition state/reason.
+
+They may not contain exact signed URLs, query/fragment capabilities, cookies, headers, bearer/session tokens, or browser storage.
 
 ## Telemetry and servers
 
-There is no telemetry endpoint, analytics transport, crash upload, corpus sync, Vercel hop, or third-party logging path in Phase B1.
+There is no analytics transport, crash upload, corpus sync, Vercel hop, or third-party logging path. Preservation remains local-first.
 
-Vercel is intentionally outside the Vault acquisition architecture. It may serve other Static Collective projects, but Vault preservation remains local-first.
+## Closed gates
 
-## Phase B2 is a separate authority decision
-
-A later change may propose actual provider asset transport only after the operator's live Phase-B1 witness establishes which asset surfaces are legitimately available to the normal signed-in page.
-
-That review must specify exact requests, permissions, rate behavior, retry ceiling, stop conditions, and secret handling. If transport requires reusable authentication extraction, it is refused rather than implemented.
+Phase B2 does not enable 25-track or full-corpus transport. Those gates remain closed until the one-track human specimen proves the real signed-in transport path without reusable authentication extraction.

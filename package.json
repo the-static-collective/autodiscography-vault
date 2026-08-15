@@ -1,6 +1,6 @@
 {
   "name": "autodiscography-vault",
-  "version": "0.2.0-phase-b1",
+  "version": "0.3.0-phase-b2",
   "private": true,
   "type": "module",
   "engines": {
@@ -8,6 +8,7 @@
   },
   "scripts": {
     "test": "node --test tests/*.test.js",
-    "synthetic:pilot": "node scripts/synthetic-pilot.js"
+    "synthetic:pilot": "node scripts/synthetic-pilot.js",
+    "pilot:admit": "node scripts/admit-staged-asset.js"
   }
 }

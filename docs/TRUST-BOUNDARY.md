@@ -1,59 +1,82 @@
 # Trust Boundary
 
-## Phase-B1 authority
+## Phase-B2 authority
 
-Autodiscography Vault is a local preservation instrument. Phase B1 adds a permanent, read-only content script limited to `https://suno.com/*` and `https://www.suno.com/*` so the operator can inspect a bounded live preservation proposal before any provider asset transport exists.
+Autodiscography Vault is a local preservation instrument. Phase B2 preserves the Phase-B1 read-only Suno witness and adds one explicitly granted browser transport capability whose only job is to stage one already-observed asset for local admission.
+
+```text
+signed-in Suno page
+  -> read-only witness
+  -> observed asset descriptor
+  -> explicit optional Downloads grant
+  -> one Chrome-staged file
+  -> local pilot:admit
+  -> .partial + SHA-256/length verification
+  -> atomic final + append-only journal + handoff
+```
+
+Authentication stays in the browser. Verified bytes leave it.
 
 Vault may:
 
-- run after an explicit operator gesture in the Vault side panel;
-- observe DOM-visible Suno track/library evidence from the normal signed-in provider page;
-- return at most 25 candidates per observation;
-- retain provider IDs, source URLs, titles, timestamps, raw structural observations, and explicit unknown fields;
-- present proposed asset roles (`raw_metadata`, `lyrics`, `artwork`, `audio_mp3`) without claiming those assets are yet acquirable;
-- write local receipts and derived manifests only through separately admitted acquisition paths;
-- hash local bytes and record exact byte length;
-- preserve explicit missing, partial, refused, failed, and verified states;
-- derive a bounded Corpus OS handoff without altering raw evidence.
+- observe DOM-visible Suno track/library evidence from the normal signed-in page;
+- aggregate duplicate witnesses by provider identity before applying the 25-track observation cap;
+- retain provider IDs, canonical Suno source URLs, titles, timestamps, and explicit unknown fields;
+- distinguish proposed asset roles from actually visible media/link transport surfaces;
+- hold an exact observed asset URL ephemerally in extension memory for the immediate user-invoked Chrome download;
+- request Chrome `downloads` only from the explicit **Enable pilot transport** action;
+- stage one asset from one provider track below `Downloads/Autodiscography-Vault/<run-id>/`;
+- durably retain only the redacted request descriptor hash, provider/role evidence, and exact admitted byte identity;
+- write local verified receipts and derived manifests through `pilot:admit`;
+- preserve explicit missing, partial, refused, failed, and verified states.
 
 Vault must not:
 
-- render or proxy a provider login;
+- render or proxy provider login;
 - request or capture passwords;
 - call `chrome.cookies` or copy browser databases;
 - use `webRequest` or capture authorization headers;
-- capture, persist, print, or export bearer tokens, cookies, session identifiers, API keys, or other reusable authentication material;
-- send corpus material or telemetry to Vercel, another server, or any third party;
+- persist, print, journal, manifest, log, filename-encode, or export signed query strings, bearer tokens, cookies, session identifiers, API keys, or reusable authentication material;
+- add `<all_urls>`, Native Messaging, telemetry, server transport, or third-party corpus upload to make the pilot work;
 - bypass access controls, CAPTCHA, rate limits, entitlement checks, or unavailable downloads;
 - infer authorship, ownership, lineage, canon, identity, similarity, semantic equivalence, or meaning;
-- replace a raw provider observation with a normalized projection;
-- delete or replace an admitted verified original.
+- delete or overwrite a verified final whose bytes differ from its receipt;
+- enable 25-track or full-corpus transport in Phase B2.
 
-## Phase-B1 observation law
+## Observation law
 
-The permanent Suno content script is a witness, not a downloader.
+The Suno content script remains a witness, not a downloader. It contains no Chrome downloads authority.
 
 Each observation:
 
 - is accepted only from exact Suno HTTPS origins;
-- is hard-capped at 25 candidates in code;
-- preserves missing provider IDs as `null` rather than synthesizing identity;
-- exposes `pilot_cap_reached` when additional candidates exist;
+- aggregates duplicate provider witnesses before the cap so sparse first observations do not erase richer later evidence;
+- is hard-capped at 25 grouped candidates;
+- preserves unknown provider IDs rather than synthesizing identity;
+- exposes `pilot_cap_reached` when additional raw candidate nodes exist;
 - refuses secret-shaped evidence as `reusable_auth_required` without echoing the sensitive value;
-- stops before MP3, artwork, lyrics, or raw-metadata transport.
+- reports `observedAssets` only when a visible media/link surface actually exposes a transport-shaped URL.
 
-The side panel's `Acquire 25-track pilot` control remains disabled until a separate Phase-B2 review admits a transport mechanism.
+## Ephemeral transport law
+
+`transportUrl` is in-memory capability, not durable evidence.
+
+For a selected asset the durable request description is:
+
+```text
+GET <origin><pathname>
+provider=suno
+track=<providerTrackId>
+asset=<assetRole>
+```
+
+Query and fragment material are excluded before hashing. The receipt/handoff may carry `requestDescriptorSha256`; they may not carry the exact transport URL.
 
 ## Exact-byte law
 
-A filename is never success.
+A filename is never success. A verified asset requires both exact byte length and SHA-256.
 
-A verified asset requires both:
-
-1. exact byte length;
-2. SHA-256 of the exact admitted bytes.
-
-Writes use a `.partial` path, verification occurs before atomic promotion, and an existing final asset may be skipped only after it independently matches the previously recorded receipt.
+`pilot:admit` copies staged bytes to a `0600` `.partial`, verifies them, atomically promotes the file, appends the verified receipt, writes the handoff projection, and independently re-verifies the final. An existing verified final may be skipped only after it matches the existing receipt.
 
 ## Journal law
 
@@ -63,16 +86,18 @@ The acquisition journal is append-only JSONL keyed logically by:
 runId + providerTrackId + assetRole
 ```
 
-Repeated keys are history, not updates. A missing final newline is treated as a possible torn write and fails closed. Prior entries are never rewritten to make the latest state look cleaner.
+Repeated keys are history, not updates. Prior entries are never rewritten. Torn/non-newline-terminated journal content fails closed.
 
-## Raw and derived separation
+## Human gate
 
-Raw provider observations remain separately addressable. Derived handoff records may reference them by path/hash, but may not overwrite or silently repair them.
+Automated proof can establish the membrane but cannot establish that a real signed-in Suno asset transport succeeds. The Phase-B2 branch therefore remains below the 25-track gate until one human specimen proves:
 
-Missing, partial, and refused states remain first-class. No inference may manufacture completeness.
+- enriched live witness;
+- at least one genuinely observed asset surface;
+- explicit optional permission grant;
+- one completed staged Chrome download;
+- successful local exact admission;
+- receipt/final byte identity agreement;
+- no reusable URL/auth material in durable output.
 
-## Stop condition for live transport
-
-If a live provider transport cannot operate using the normal signed-in browser origin without extracting reusable authentication material, stop and emit a `refused` receipt with reason code `reusable_auth_required`.
-
-Do not widen the authority boundary to make acquisition succeed.
+If real transport requires extracting reusable authentication material, stop with `reusable_auth_required`. Do not widen authority to make acquisition succeed.

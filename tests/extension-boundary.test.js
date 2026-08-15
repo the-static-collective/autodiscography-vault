@@ -6,11 +6,12 @@ async function text(path) {
   return readFile(new URL(path, import.meta.url), 'utf8');
 }
 
-test('MV3 Phase B1 authority is permanent but Suno-only', async () => {
+test('MV3 Phase B2 keeps transport optional and Suno witness permanent', async () => {
   const manifest = JSON.parse(await text('../extension/manifest.json'));
   assert.equal(manifest.manifest_version, 3);
   assert.equal('host_permissions' in manifest, false);
   assert.deepEqual(manifest.permissions, ['sidePanel']);
+  assert.deepEqual(manifest.optional_permissions, ['downloads']);
   assert.equal(manifest.side_panel.default_path, 'src/sidepanel/index.html');
 
   assert.equal(Array.isArray(manifest.content_scripts), true);
@@ -35,9 +36,9 @@ test('fixture adapter contains no network or browser-session primitive', async (
   assert.equal(/\bfetch\s*\(|XMLHttpRequest|WebSocket|chrome\.cookies|document\.cookie|authorization/i.test(adapter), false);
 });
 
-test('Phase B1 content script contains no network interception or cookie primitive', async () => {
+test('provider witness remains observation-only after Phase B2 transport is added to extension page', async () => {
   const contentScript = await text('../extension/src/provider/suno/content-script.js');
   const observer = await text('../extension/src/provider/suno/live-observer.js');
   const source = `${contentScript}\n${observer}`;
-  assert.equal(/\bfetch\s*\(|XMLHttpRequest|WebSocket|chrome\.cookies|document\.cookie|webRequest/i.test(source), false);
+  assert.equal(/\bfetch\s*\(|XMLHttpRequest|WebSocket|chrome\.cookies|document\.cookie|webRequest|chrome\.downloads/i.test(source), false);
 });
