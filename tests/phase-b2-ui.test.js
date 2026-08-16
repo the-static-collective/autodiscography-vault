@@ -85,6 +85,24 @@ test('one-shot WAV witness binds a future Chrome download without persisting tra
   }
 });
 
+test('a terminal download clears the one-shot WAV arm before async completed-path lookup', async () => {
+  const js = await text('../extension/src/sidepanel/index.js');
+  const start = js.indexOf('async function observeDownloadChanges(delta)');
+  const end = js.indexOf('async function copyAdmissionCommand()', start);
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+  const fn = js.slice(start, end);
+
+  const activeClear = fn.indexOf('activeDownload = null;');
+  const armClear = fn.indexOf('armedWavWitness = null;', activeClear);
+  const completedLookup = fn.indexOf('await completedDownloadItem', activeClear);
+  assert.notEqual(activeClear, -1);
+  assert.notEqual(armClear, -1);
+  assert.notEqual(completedLookup, -1);
+  assert.ok(armClear < completedLookup,
+    'terminal state must disarm the one-shot witness before yielding to the async filename lookup');
+});
+
 test('completed staging exposes a temporary safe Windows admission handoff without new browser authority', async () => {
   const html = await text('../extension/src/sidepanel/index.html');
   const js = await text('../extension/src/sidepanel/index.js');
