@@ -102,6 +102,7 @@ test('completed staging exposes a temporary safe Windows admission handoff witho
   assert.match(js, /navigator\.clipboard\.writeText\s*\(/);
   assert.match(js, /Copy unavailable; command remains visible\./);
   assert.match(js, /chrome\.downloads\.search\s*\(\s*\{\s*id:/);
-  assert.equal(/chrome\.permissions\.request[\s\S]*clipboard/i.test(js), false,
+  const permissionCall = js.match(/chrome\.permissions\.request\s*\(\s*\{([\s\S]*?)\}\s*\)/)?.[1] ?? '';
+  assert.equal(/clipboard/i.test(permissionCall), false,
     'copying the command must not add clipboard extension permission');
 });
