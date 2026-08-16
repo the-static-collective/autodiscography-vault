@@ -84,3 +84,24 @@ test('one-shot WAV witness binds a future Chrome download without persisting tra
       'bound active download state must not carry URL/referrer capability');
   }
 });
+
+test('completed staging exposes a temporary safe Windows admission handoff without new browser authority', async () => {
+  const html = await text('../extension/src/sidepanel/index.html');
+  const js = await text('../extension/src/sidepanel/index.js');
+
+  assert.match(html, /Vault root for local admission/i);
+  assert.match(html, /id="vault-root"/i);
+  assert.match(html, /E:\\Autodiscography-Vault/);
+  assert.match(html, /id="admit-command"/i);
+  assert.match(html, /id="copy-admit-command"[^>]*disabled/i);
+  assert.match(html, /temporary[^<]*proof|proof[^<]*temporary/i);
+  assert.match(html, /local companion/i);
+
+  assert.match(js, /formatPowerShellAdmitCommand/);
+  assert.match(js, /completedStaging/);
+  assert.match(js, /navigator\.clipboard\.writeText\s*\(/);
+  assert.match(js, /Copy unavailable; command remains visible\./);
+  assert.match(js, /chrome\.downloads\.search\s*\(\s*\{\s*id:/);
+  assert.equal(/chrome\.permissions\.request[\s\S]*clipboard/i.test(js), false,
+    'copying the command must not add clipboard extension permission');
+});
