@@ -4,117 +4,71 @@
 
 **Goal:** Prove one real full-song Suno WAV can be witnessed from the normal signed-in web download flow, staged as local bytes, admitted as `audio_wav`, and verified under an operator-selected Vault root without exporting browser/session authority.
 
-**Architecture:** Extend the existing Phase B2 browser membrane rather than replacing it. The live observer learns to identify honest WAV DOM surfaces, while the side panel adds a one-shot `chrome.downloads.onCreated` witness for the normal Suno Download → WAV flow when no DOM WAV URL exists. Local Node admission remains the durable authority boundary and gains a minimal WAV container sanity check plus parity with the contract's already-optional `requestDescriptorSha256`.
+**Architecture:** Extend the proven Phase B2 membrane. The live observer recognizes honest WAV DOM surfaces; when Suno's normal Download → WAV action produces only a browser download, a one-shot `chrome.downloads.onCreated` witness binds that future download to one selected track. Node remains the durable authority boundary and adds a minimal WAV container check plus parity with the contract's already-optional `requestDescriptorSha256`.
 
 **Tech Stack:** Manifest V3 Chrome extension, browser ES modules, Node.js 22+, `node:test`, existing acquisition contract/journal/verifier/manifest packages, GitHub Actions.
 
 ## Global Constraints
 
-- Full-song master WAV only; stems and Studio exports remain out of scope.
-- The operator initiates Suno's normal Download → WAV action; the extension must not synthesize a hidden provider endpoint.
-- Exact signed URLs, query strings, fragments, cookies, authorization headers, tokens, session material, and browser storage must never enter durable receipts/manifests.
-- `downloads` remains optional runtime authority; do not add `cookies`, `webRequest`, `<all_urls>`, Native Messaging, telemetry, or server-side acquisition.
-- At most one WAV witness may be armed at a time; a second matching download before resolution fails closed as ambiguous.
-- Browser-download WAV evidence may omit `requestDescriptorSha256`; never fabricate a descriptor hash.
-- `audio_wav` admission must pass RIFF/WAVE or RF64/WAVE header sanity before a verified receipt is written.
-- The operator may point `--vault-root` at an external drive; the browser receives no direct filesystem authority to that drive.
-- The 25-track/full-corpus acquisition control stays disabled throughout B2C.
-- Manual `pilot:admit` remains acceptable only for this proof gate. No B2C design choice may make command-line admission a permanent requirement; later local-companion automation must be able to reuse the same admission contract.
+- Full-song master WAV only; stems and Studio exports are out of scope.
+- The operator initiates Suno's normal Download → WAV action; do not reconstruct hidden endpoints.
+- Exact URLs, query strings, fragments, cookies, authorization headers, tokens, session material, and browser storage never become durable evidence.
+- `downloads` remains optional runtime authority; do not add `cookies`, `webRequest`, `<all_urls>`, Native Messaging, telemetry, or server acquisition.
+- Exactly one WAV witness may be armed. If a second matching WAV begins before the first bound WAV resolves, fail closed as `wav_witness_ambiguous`.
+- Browser-download WAV evidence may omit `requestDescriptorSha256`; never fabricate it.
+- `audio_wav` must pass RIFF/WAVE or RF64/WAVE header sanity before a verified receipt is written.
+- `--vault-root` may target an external drive; the browser gets no direct authority over that drive.
+- The 25-track/full-corpus control stays disabled throughout B2C.
+- Manual `pilot:admit` is temporary proof ceremony only. Later local-companion automation must reuse this same admission boundary rather than weakening it.
 
 ---
 
-### Task 1: Recognize WAV as an honest observed asset
+### Task 1: Recognize WAV as observed evidence
 
 **Files:**
 - Modify: `extension/src/provider/suno/live-observer.js`
 - Test: `tests/live-observer.test.js`
 
 **Interfaces:**
-- Consumes: current `buildLiveObservation(...)`, `extractSunoCandidates(...)`, and observed-asset shape.
-- Produces: `audio_wav` in `proposedAssets`; `.wav` and explicit WAV MIME surfaces normalize to observed assets with the existing safe request preview/hash behavior.
+- Produces: `audio_wav` in `proposedAssets`; `.wav` and explicit WAV MIME surfaces classify as `audio_wav`.
 
-- [ ] **Step 1: Write failing WAV classifier tests**
+- [ ] **Step 1: Write the failing tests**
 
-Add tests that require `audio_wav` in proposed roles and verify DOM classification without changing existing MP3/artwork behavior:
+Add a test using a `<source type="audio/wav" src="https://cdn.example.test/song.wav?sig=ephemeral">` and an `<a href="https://cdn.example.test/song.wav?...">`. Require `audio_wav`, a query/fragment-free request preview, and unchanged MP3/artwork behavior.
 
-```js
-test('WAV is proposed and real WAV surfaces classify as audio_wav', () => {
-  const observer = loadObserver();
-  const songUrl = 'https://suno.com/song/track-wav';
-  const wavUrl = 'https://cdn.example.test/track-wav.wav?sig=ephemeral#download';
-  const node = element({
-    tagName: 'DIV',
-    attributes: { 'data-song-id': 'track-wav', 'data-title': 'WAV Track' },
-    children: [
-      element({ tagName: 'A', attributes: { href: songUrl } }),
-      element({ tagName: 'SOURCE', attributes: { src: wavUrl, type: 'audio/wav' } }),
-    ],
-  });
-
-  const extracted = observer.extractSunoCandidates({ querySelectorAll: () => [node] });
-  const observation = observer.buildLiveObservation({
-    origin: 'https://suno.com',
-    candidates: extracted.candidates,
-    candidateNodeCount: extracted.candidateNodeCount,
-    observedAt: '2026-08-15T21:00:00.000Z',
-  });
-
-  assert.equal(observation.tracks[0].proposedAssets.includes('audio_wav'), true);
-  const wav = observation.tracks[0].observedAssets.find(asset => asset.assetRole === 'audio_wav');
-  assert.ok(wav);
-  assert.equal(wav.transportUrl, wavUrl);
-  assert.equal(wav.requestPreview.includes('ephemeral'), false);
-  assert.match(wav.requestPreview, /asset=audio_wav$/);
-});
-```
-
-Also cover an `<a href="...wav">` surface and confirm an unknown audio type remains `other`.
-
-- [ ] **Step 2: Run the focused test and confirm RED**
-
-Run:
+- [ ] **Step 2: Run RED**
 
 ```bash
 node --test tests/live-observer.test.js
 ```
 
-Expected: the new WAV assertions fail because `PROPOSED_ASSETS` and the classifier do not yet recognize `audio_wav`.
+Expected: the new WAV assertions fail.
 
-- [ ] **Step 3: Implement minimal WAV classification**
-
-In `live-observer.js`, extend the role vocabulary and classifier:
+- [ ] **Step 3: Implement minimal classification**
 
 ```js
 const PROPOSED_ASSETS = Object.freeze(['raw_metadata', 'lyrics', 'artwork', 'audio_mp3', 'audio_wav']);
 const WAV_PATH = /\.wav$/i;
 
-// AUDIO/SOURCE
-if (type === 'audio/wav' || WAV_PATH.test(pathname)) {
-  assetRole = 'audio_wav';
-} else if (type === 'audio/mpeg' || MP3_PATH.test(pathname)) {
-  assetRole = 'audio_mp3';
-} else {
-  assetRole = 'other';
-}
+// For AUDIO/SOURCE:
+if (type === 'audio/wav' || WAV_PATH.test(pathname)) assetRole = 'audio_wav';
+else if (type === 'audio/mpeg' || MP3_PATH.test(pathname)) assetRole = 'audio_mp3';
+else assetRole = 'other';
 
-// A
+// For A:
 if (tagName === 'A' && WAV_PATH.test(pathname)) {
   assetRole = 'audio_wav';
   surface = 'link';
 }
 ```
 
-Do not add endpoint inference, host assumptions, or network interception.
-
-- [ ] **Step 4: Re-run focused tests**
-
-Run:
+- [ ] **Step 4: Run GREEN**
 
 ```bash
 node --test tests/live-observer.test.js
 ```
 
-Expected: PASS, including all pre-existing MP3/artwork tests.
+Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -123,44 +77,29 @@ git add extension/src/provider/suno/live-observer.js tests/live-observer.test.js
 git commit -m "feat: witness honest Suno WAV surfaces"
 ```
 
-### Task 2: Add a pure one-shot WAV download binder
+### Task 2: Add a pure future-only WAV binder
 
 **Files:**
 - Create: `extension/src/sidepanel/wav-witness.js`
 - Create: `tests/wav-witness.test.js`
 
 **Interfaces:**
-- Consumes: a fresh arm `{ runId, providerTrackId, observedAt, armedAtMs }` and Chrome `DownloadItem` metadata.
-- Produces: `bindCreatedWav({ arm, activeDownloadId, item }) -> { status: 'ignored' | 'bound' | 'ambiguous', ... }` with no URL/referrer copied into the bound result.
+- Consumes: arm `{ runId, providerTrackId, observedAt, armedAtMs }`, current bound download ID, Chrome `DownloadItem`.
+- Produces: `bindCreatedWav(...) -> ignored | bound | ambiguous`; bound evidence never contains URL/referrer fields.
 
-- [ ] **Step 1: Write failing pure-state tests**
+- [ ] **Step 1: Write failing tests**
 
-Create `tests/wav-witness.test.js` covering: unarmed download ignored; pre-arm historical item ignored; MP3 ignored; `.wav` filename accepted; `audio/wav` MIME accepted; explicitly non-Suno referrer ignored; absent referrer allowed; second matching WAV while one is bound returns `ambiguous`; returned bound evidence contains no `url`, `finalUrl`, or `referrer`.
+Cover: no arm → ignored; pre-arm item → ignored; MP3 → ignored; `.wav` filename → bound; WAV MIME → bound; explicit non-Suno referrer → ignored; absent referrer → allowed; second matching WAV with an active ID → `ambiguous`; returned bound object has no `url`, `finalUrl`, or `referrer`.
 
-Use a representative arm:
-
-```js
-const arm = Object.freeze({
-  runId: 'suno-b2c-test',
-  providerTrackId: 'track-alpha',
-  observedAt: '2026-08-15T21:00:00.000Z',
-  armedAtMs: Date.parse('2026-08-15T21:00:01.000Z'),
-});
-```
-
-- [ ] **Step 2: Run and confirm RED**
-
-Run:
+- [ ] **Step 2: Run RED**
 
 ```bash
 node --test tests/wav-witness.test.js
 ```
 
-Expected: FAIL because `wav-witness.js` does not exist.
+Expected: FAIL because the module does not exist.
 
-- [ ] **Step 3: Implement the bounded binder**
-
-Create the module with this public surface:
+- [ ] **Step 3: Implement**
 
 ```js
 const SUNO_ORIGINS = new Set(['https://suno.com', 'https://www.suno.com']);
@@ -174,11 +113,8 @@ export function isWavDownloadItem(item) {
 
 function referrerIsCompatible(referrer) {
   if (!referrer) return true;
-  try {
-    return SUNO_ORIGINS.has(new URL(referrer).origin);
-  } catch {
-    return false;
-  }
+  try { return SUNO_ORIGINS.has(new URL(referrer).origin); }
+  catch { return false; }
 }
 
 export function bindCreatedWav({ arm, activeDownloadId = null, item } = {}) {
@@ -186,24 +122,13 @@ export function bindCreatedWav({ arm, activeDownloadId = null, item } = {}) {
   const startedAtMs = Date.parse(item?.startTime ?? '');
   if (!Number.isFinite(startedAtMs) || startedAtMs < arm.armedAtMs) return Object.freeze({ status: 'ignored' });
   if (!referrerIsCompatible(item?.referrer)) return Object.freeze({ status: 'ignored' });
-  if (!Number.isInteger(item?.id) || typeof item?.filename !== 'string' || !item.filename) {
-    return Object.freeze({ status: 'ignored' });
-  }
+  if (!Number.isInteger(item?.id) || typeof item?.filename !== 'string' || !item.filename) return Object.freeze({ status: 'ignored' });
   if (activeDownloadId !== null) return Object.freeze({ status: 'ambiguous' });
-  return Object.freeze({
-    status: 'bound',
-    downloadId: item.id,
-    filename: item.filename,
-    mime: typeof item.mime === 'string' ? item.mime : '',
-  });
+  return Object.freeze({ status: 'bound', downloadId: item.id, filename: item.filename, mime: item.mime ?? '' });
 }
 ```
 
-The helper may inspect `referrer` transiently but must never return it.
-
-- [ ] **Step 4: Re-run focused tests**
-
-Run:
+- [ ] **Step 4: Run GREEN**
 
 ```bash
 node --test tests/wav-witness.test.js
@@ -218,7 +143,7 @@ git add extension/src/sidepanel/wav-witness.js tests/wav-witness.test.js
 git commit -m "feat: add one-shot WAV download binder"
 ```
 
-### Task 3: Integrate the one-shot WAV witness into the side panel
+### Task 3: Wire the one-shot witness into the side panel
 
 **Files:**
 - Modify: `extension/src/sidepanel/index.html`
@@ -226,76 +151,67 @@ git commit -m "feat: add one-shot WAV download binder"
 - Modify: `tests/phase-b2-ui.test.js`
 
 **Interfaces:**
-- Consumes: `bindCreatedWav(...)`, `isWavDownloadItem(...)`, existing optional `downloads` permission, live track identity and observation time.
-- Produces: one per-track **Witness one WAV** user gesture; a future-only `onCreated` binding; completion/interruption status containing only safe local/evidence fields.
+- Consumes: Task 2 binder and existing optional Downloads permission.
+- Produces: per-track **Witness one WAV**, future-only `onCreated` binding, safe completion/interruption status.
 
-- [ ] **Step 1: Add failing UI/source-contract tests**
+- [ ] **Step 1: Write failing UI/source tests**
 
-Extend `tests/phase-b2-ui.test.js` to require:
+Require the UI/source to contain `Witness one WAV`, `chrome.downloads.onCreated.addListener`, `bindCreatedWav`, `chrome.downloads.search({ id: ... })`, and `audio_wav`. Keep the existing forbidden-authority assertions and disabled 25-track control.
 
-```js
-assert.match(html, /Witness one WAV/i);
-assert.match(js, /chrome\.downloads\.onCreated\.addListener/);
-assert.match(js, /bindCreatedWav/);
-assert.match(js, /chrome\.downloads\.search\s*\(\s*\{\s*id:/);
-assert.match(js, /audio_wav/);
-```
-
-Also assert the 25-track acquisition button remains disabled and the source still contains none of the existing forbidden browser authorities.
-
-- [ ] **Step 2: Run and confirm RED**
-
-Run:
+- [ ] **Step 2: Run RED**
 
 ```bash
 node --test tests/phase-b2-ui.test.js
 ```
 
-Expected: FAIL only on the new WAV-witness requirements.
+Expected: FAIL on only the new requirements.
 
-- [ ] **Step 3: Add the per-track arm gesture**
+- [ ] **Step 3: Arm one selected track**
 
-Import the binder:
-
-```js
-import { bindCreatedWav, isWavDownloadItem } from './wav-witness.js';
-```
-
-Add state:
+Import Task 2 helpers and add:
 
 ```js
 let armedWavWitness = null;
 ```
 
-Render a per-track button that is disabled unless pilot transport is enabled, the track has a provider ID, and no download/witness is active. On click, call `armWavWitness(track)`.
-
-`armWavWitness(track)` must:
+A per-track arm button must refuse unless transport is enabled, provider ID and `latestObservation.observedAt` exist, and no arm/download is active. It creates:
 
 ```js
-const observedAt = latestObservation?.observedAt;
-const currentRunId = runId();
 armedWavWitness = Object.freeze({
-  runId: currentRunId,
+  runId: runId(),
   providerTrackId: track.providerTrackId,
-  observedAt,
+  observedAt: latestObservation.observedAt,
   armedAtMs: Date.now(),
 });
 selectedProviderTrackId = track.providerTrackId;
-transportStatus.textContent = `WAV witness armed for track ${track.providerTrackId}. In Suno, choose Download → WAV now.`;
 ```
 
-Refuse if transport is disabled, identity/timestamp is absent, another track is already bound for the B2 session, or any download/witness is already active.
+Disable ordinary staging buttons while the WAV arm exists.
 
-- [ ] **Step 4: Bind only future Chrome WAV downloads**
+- [ ] **Step 4: Register Downloads listeners only after permission grant**
 
-After optional Downloads permission is granted, register both listeners:
+Post-grant, require `downloads.download`, `downloads.search`, `downloads.onCreated`, and `downloads.onChanged`. Then register:
 
 ```js
 chrome.downloads.onCreated.addListener(observeCreatedDownload);
 chrome.downloads.onChanged.addListener(observeDownloadChanges);
 ```
 
-`observeCreatedDownload(item)` calls `bindCreatedWav(...)`. On `bound`, create an `activeDownload` with:
+Do not require these permission-gated APIs before `chrome.permissions.request({ permissions: ['downloads'] })`.
+
+- [ ] **Step 5: Bind a future WAV without losing the ambiguity guard**
+
+`observeCreatedDownload(item)` calls:
+
+```js
+const bound = bindCreatedWav({
+  arm: armedWavWitness,
+  activeDownloadId: activeDownload?.mode === 'user_wav' ? activeDownload.downloadId : null,
+  item,
+});
+```
+
+On `bound`, set:
 
 ```js
 activeDownload = Object.freeze({
@@ -305,35 +221,30 @@ activeDownload = Object.freeze({
   providerTrackId: armedWavWitness.providerTrackId,
   assetRole: 'audio_wav',
   observedAt: armedWavWitness.observedAt,
-  requestDescriptorSha256: undefined,
   filename: bound.filename,
 });
-armedWavWitness = null;
 ```
 
-On `ambiguous`, clear the arm/active witness and report `wav_witness_ambiguous`; do not emit a staged result.
+**Do not clear `armedWavWitness` yet.** It must remain until completion/interruption so a second matching WAV races through the binder and returns `ambiguous`. On `ambiguous`, clear both arm and active witness and report `wav_witness_ambiguous`.
 
-Never copy `item.url`, `item.finalUrl`, or `item.referrer` into `activeDownload`, status text, storage, or messages.
+Never copy `item.url`, `item.finalUrl`, or `item.referrer` into state/status/storage.
 
-- [ ] **Step 5: Resolve the final local filename at completion**
+- [ ] **Step 6: Resolve the final filename on completion**
 
-Make `observeDownloadChanges` async. For `mode === 'user_wav'` and `state.current === 'complete'`, query only the bound ID:
+For `mode === 'user_wav'` and `state.current === 'complete'`:
 
 ```js
 const [item] = await chrome.downloads.search({ id: completed.downloadId });
 if (!item || !isWavDownloadItem(item)) {
   transportStatus.textContent = 'WAV witness refused: completed download no longer has WAV evidence.';
+  armedWavWitness = null;
   return;
 }
 ```
 
-Use only `item.filename` from the search result. The staged status must say `role audio_wav` and explicitly say `request descriptor unavailable by design` rather than inventing a hash.
+Use only `item.filename` as the staged local path. Report `role audio_wav` and `request descriptor unavailable by design`. On completion or interruption, clear both `activeDownload` and `armedWavWitness`.
 
-On `interrupted`, clear both active and armed state and keep the journal untouched.
-
-- [ ] **Step 6: Re-run focused UI tests**
-
-Run:
+- [ ] **Step 7: Run GREEN**
 
 ```bash
 node --test tests/phase-b2-ui.test.js tests/wav-witness.test.js
@@ -341,61 +252,44 @@ node --test tests/phase-b2-ui.test.js tests/wav-witness.test.js
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add extension/src/sidepanel/index.html extension/src/sidepanel/index.js tests/phase-b2-ui.test.js
 git commit -m "feat: witness one user-triggered Suno WAV"
 ```
 
-### Task 4: Make local admission honest for WAV and optional request descriptors
+### Task 4: Admit only sane WAV bytes and allow absent request descriptors
 
 **Files:**
 - Create: `packages/wav/index.js`
+- Create: `tests/wav.test.js`
 - Modify: `scripts/admit-staged-asset.js`
 - Modify: `tests/admit-staged-asset.test.js`
-- Create: `tests/wav.test.js`
 
 **Interfaces:**
-- Consumes: staged local path and existing `admitStagedAsset(options)`.
-- Produces: `assertWavContainer(path)`; `pilot:admit` accepts omitted `requestDescriptorSha256` when the acquisition contract permits it; verified `audio_wav` is minted only for RIFF/WAVE or RF64/WAVE bytes.
+- Produces: `assertWavContainer(path)` and `pilot:admit` parity with the optional durable request descriptor.
 
-- [ ] **Step 1: Write failing WAV-container tests**
+- [ ] **Step 1: Write failing WAV tests**
 
-Create `tests/wav.test.js` with minimal headers:
+Use minimal 12-byte headers:
 
 ```js
 const riff = Buffer.concat([Buffer.from('RIFF'), Buffer.alloc(4), Buffer.from('WAVE')]);
 const rf64 = Buffer.concat([Buffer.from('RF64'), Buffer.alloc(4), Buffer.from('WAVE')]);
 ```
 
-Require both to pass and `Buffer.from('not-wave-data')` to reject with `invalid WAV container`.
+Require RIFF and RF64 to pass, `not-wave-data` to reject, an `audio_wav` admission without `requestDescriptorSha256` to verify, and fake `.wav` bytes to refuse before the journal exists.
 
-- [ ] **Step 2: Write failing admission-parity tests**
-
-Extend `tests/admit-staged-asset.test.js` with an `audio_wav` fixture that omits `requestDescriptorSha256`. Require:
-
-```js
-assert.equal(result.receipt.assetRole, 'audio_wav');
-assert.equal('requestDescriptorSha256' in result.receipt, false);
-assert.equal(handoff.records[0].requestDescriptorSha256, null);
-```
-
-Also assert a fake `.wav` containing non-WAV bytes is rejected before `receipts/acquisition.jsonl` exists, and a supplied malformed request descriptor still refuses.
-
-- [ ] **Step 3: Run and confirm RED**
-
-Run:
+- [ ] **Step 2: Run RED**
 
 ```bash
 node --test tests/wav.test.js tests/admit-staged-asset.test.js
 ```
 
-Expected: FAIL because the WAV checker does not exist and `pilot:admit` currently requires the descriptor hash.
+Expected: FAIL because the checker does not exist and the CLI currently requires the descriptor.
 
-- [ ] **Step 4: Implement the 12-byte container sanity gate**
-
-Create `packages/wav/index.js`:
+- [ ] **Step 3: Implement the WAV sanity helper**
 
 ```js
 import { open } from 'node:fs/promises';
@@ -407,20 +301,14 @@ export async function assertWavContainer(path) {
     const { bytesRead } = await handle.read(header, 0, 12, 0);
     const container = header.toString('ascii', 0, 4);
     const wave = header.toString('ascii', 8, 12);
-    if (bytesRead < 12 || !['RIFF', 'RF64'].includes(container) || wave !== 'WAVE') {
-      throw new Error('invalid WAV container');
-    }
+    if (bytesRead < 12 || !['RIFF', 'RF64'].includes(container) || wave !== 'WAVE') throw new Error('invalid WAV container');
   } finally {
     await handle.close();
   }
 }
 ```
 
-This is only a container sanity check; do not parse audio semantics or transcode.
-
-- [ ] **Step 5: Relax only the request-descriptor requirement**
-
-In `validateInputs(options)`:
+- [ ] **Step 4: Relax only `requestDescriptorSha256`**
 
 ```js
 const requestDescriptorSha256 = options?.requestDescriptorSha256 === undefined
@@ -431,44 +319,38 @@ if (requestDescriptorSha256 !== undefined && !SHA256_HEX.test(requestDescriptorS
 }
 ```
 
-When constructing the validation probe and final receipt, include the field conditionally:
+Include it in validation/final receipt only with:
 
 ```js
 ...(requestDescriptorSha256 === undefined ? {} : { requestDescriptorSha256 }),
 ```
 
-All other required admission fields remain required.
+All other admission fields remain mandatory.
 
-- [ ] **Step 6: Enforce WAV sanity before durable mutation**
+- [ ] **Step 5: Enforce sanity before journal mutation**
 
-After `assertStagedFile(input.stagedFile)` and before journal/final promotion:
+Immediately after `assertStagedFile(input.stagedFile)`:
 
 ```js
-if (input.assetRole === 'audio_wav') {
-  await assertWavContainer(input.stagedFile);
-}
+if (input.assetRole === 'audio_wav') await assertWavContainer(input.stagedFile);
 ```
 
-Do not apply the WAV parser to `audio_mp3`, artwork, or other existing roles.
-
-- [ ] **Step 7: Re-run focused admission tests**
-
-Run:
+- [ ] **Step 6: Run GREEN**
 
 ```bash
 node --test tests/wav.test.js tests/admit-staged-asset.test.js tests/contract.test.js tests/manifest.test.js
 ```
 
-Expected: PASS, including existing supplied-hash behavior.
+Expected: PASS; existing supplied-hash behavior remains intact.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add packages/wav/index.js scripts/admit-staged-asset.js tests/wav.test.js tests/admit-staged-asset.test.js
 git commit -m "feat: admit verified WAV bytes without fabricated request evidence"
 ```
 
-### Task 5: Make the Windows/external-drive handoff copyable but explicitly temporary
+### Task 5: Add a safe, temporary Windows admission handoff
 
 **Files:**
 - Create: `extension/src/sidepanel/powershell-handoff.js`
@@ -478,29 +360,13 @@ git commit -m "feat: admit verified WAV bytes without fabricated request evidenc
 - Modify: `extension/src/sidepanel/styles.css`
 
 **Interfaces:**
-- Consumes: completed staged filename, operator-entered Vault root, run/track/role/time, optional request descriptor.
-- Produces: a visible/copyable `npm run pilot:admit -- ...` PowerShell command containing only safe local/evidence fields.
+- Produces: visible/copyable `pilot:admit` command using local path, chosen Vault root, run/track/role/time, and optional descriptor only.
 
-- [ ] **Step 1: Write failing command-format tests**
+- [ ] **Step 1: Write RED formatter tests**
 
-Create `tests/powershell-handoff.test.js` requiring a formatter:
+Require PowerShell single-quote escaping, required flags, omission of `--request-descriptor-sha256` when absent, inclusion when supplied, and refusal of secret-shaped values.
 
-```js
-const command = formatPowerShellAdmitCommand({
-  stagedFile: `C:\\Users\\Example User\\Downloads\\Song's master.wav`,
-  vaultRoot: 'E:\\Autodiscography-Vault',
-  runId: 'suno-b2c-test',
-  providerTrackId: 'track-alpha',
-  assetRole: 'audio_wav',
-  observedAt: '2026-08-15T21:00:00.000Z',
-});
-```
-
-Require PowerShell-safe single-quote escaping (`'` becomes `''`), all required flags, omission of `--request-descriptor-sha256` when absent, inclusion when a valid hash is supplied, and rejection if any supplied field contains secret-shaped authorization/cookie/token/session material.
-
-- [ ] **Step 2: Run and confirm RED**
-
-Run:
+- [ ] **Step 2: Run RED**
 
 ```bash
 node --test tests/powershell-handoff.test.js
@@ -508,18 +374,14 @@ node --test tests/powershell-handoff.test.js
 
 Expected: FAIL because the formatter does not exist.
 
-- [ ] **Step 3: Implement the pure formatter**
-
-Create `powershell-handoff.js` with:
+- [ ] **Step 3: Implement formatter**
 
 ```js
 const SECRET_VALUE = /(?:\bBearer\s+[A-Za-z0-9._~+/=-]+|\b(?:authorization|cookie|session|token|password|secret)\s*[:=])/i;
-
 function ps(value) {
   if (typeof value !== 'string' || !value || SECRET_VALUE.test(value)) throw new Error('unsafe handoff value');
   return `'${value.replaceAll("'", "''")}'`;
 }
-
 export function formatPowerShellAdmitCommand(input) {
   const parts = [
     'npm run pilot:admit --',
@@ -530,28 +392,22 @@ export function formatPowerShellAdmitCommand(input) {
     `--asset-role ${ps(input.assetRole)}`,
     `--observed-at ${ps(input.observedAt)}`,
   ];
-  if (input.requestDescriptorSha256 !== undefined) {
-    parts.push(`--request-descriptor-sha256 ${ps(input.requestDescriptorSha256)}`);
-  }
+  if (input.requestDescriptorSha256 !== undefined) parts.push(`--request-descriptor-sha256 ${ps(input.requestDescriptorSha256)}`);
   return parts.join(' ');
 }
 ```
 
-- [ ] **Step 4: Add the temporary operator handoff UI**
+- [ ] **Step 4: Add operator UI**
 
-Add a text input with label `Vault root for local admission` and placeholder `E:\Autodiscography-Vault`, a `<code>`/`<pre>` area for the command, and **Copy pilot:admit command**. Keep the copy button disabled until a completed staged witness and non-empty Vault root both exist.
+Add `Vault root for local admission`, placeholder `E:\Autodiscography-Vault`, a visible command area, and **Copy pilot:admit command**. Enable only after a completed witness and a non-empty Vault root. Copy via `navigator.clipboard.writeText(...)` only from that button gesture; add no clipboard permission. On copy failure, keep the command visible.
 
-Use `navigator.clipboard.writeText(command)` only from the explicit copy-button gesture; do not add a clipboard manifest permission. If clipboard writing fails, leave the visible command in place and report `Copy unavailable; command remains visible.`
-
-- [ ] **Step 5: Re-run handoff and UI tests**
-
-Run:
+- [ ] **Step 5: Run GREEN**
 
 ```bash
 node --test tests/powershell-handoff.test.js tests/phase-b2-ui.test.js
 ```
 
-Expected: PASS and no new forbidden authority in the side-panel source.
+Expected: PASS.
 
 - [ ] **Step 6: Commit**
 
@@ -560,7 +416,7 @@ git add extension/src/sidepanel/powershell-handoff.js extension/src/sidepanel/in
 git commit -m "feat: expose safe Windows WAV admission handoff"
 ```
 
-### Task 6: Document the human WAV gate and prove the full regression surface
+### Task 6: Lock the boundary and document the human specimen
 
 **Files:**
 - Modify: `README.md`
@@ -569,121 +425,88 @@ git commit -m "feat: expose safe Windows WAV admission handoff"
 - Modify: `docs/NETWORK-BEHAVIOR.md`
 - Modify: `tests/extension-boundary.test.js`
 
-**Interfaces:**
-- Consumes: all B2C behavior from Tasks 1–5.
-- Produces: operator instructions and executable boundary assertions that keep B2C one-WAV-only and preserve the BEE membrane.
+- [ ] **Step 1: Strengthen boundary assertions**
 
-- [ ] **Step 1: Add/extend boundary assertions before doc edits**
+Require required extension permission `sidePanel`, optional `downloads`, Suno-only content-script matches, no `cookies`, `webRequest`, `<all_urls>`, Native Messaging, new host permissions, or browser storage, and the disabled 25-track control.
 
-Update `tests/extension-boundary.test.js` to assert the manifest still has required permission exactly `sidePanel`, optional `downloads`, Suno-only content-script matches, and no `cookies`, `webRequest`, `<all_urls>`, `nativeMessaging`, or new host permissions.
-
-Add a source scan that refuses durable/browser storage APIs in the WAV witness path and confirms the 25-track acquisition control remains disabled.
-
-- [ ] **Step 2: Run the boundary test**
-
-Run:
+- [ ] **Step 2: Run boundary proof**
 
 ```bash
 node --test tests/extension-boundary.test.js
 ```
 
-Expected: PASS if Tasks 1–5 did not widen authority. If it fails, repair the implementation rather than weakening the assertion.
+Expected: PASS. Repair implementation if it fails; do not weaken the boundary.
 
-- [ ] **Step 3: Update operator/runbook documentation**
+- [ ] **Step 3: Document exact B2C operator flow**
 
-Document this exact B2C specimen:
+Document:
 
 ```text
-1. Reload the unpacked B2C extension in Chrome.
-2. Open a normal signed-in Suno Library/Workspace page and Refresh live witness.
-3. Enable pilot transport.
-4. On exactly one track, click Witness one WAV.
-5. In Suno, use its normal ... → Download → WAV action.
-6. Wait for Vault to report the WAV staged local path.
-7. Enter the external-drive Vault root, e.g. E:\Autodiscography-Vault.
-8. Copy/run the generated pilot:admit command from the repository root.
-9. Independently hash the final admitted WAV and compare byte length + SHA-256 with the receipt.
-10. Inspect acquisition.jsonl and handoff.json for exact URL/query/fragment/cookie/auth/token/session leakage.
+Refresh live witness → Enable pilot transport → Witness one WAV on one track →
+use Suno's normal ... → Download → WAV → wait for completed local path →
+enter external-drive Vault root → copy/run pilot:admit → independently hash final WAV.
 ```
 
-State explicitly that steps 7–8 are temporary B2C proof ceremony and are targeted for elimination by the later local-companion automation slice.
+State that the command step is temporary proof ceremony targeted for elimination by the later local companion.
 
-- [ ] **Step 4: Run the complete automated suite**
-
-Run:
+- [ ] **Step 4: Run the complete suite**
 
 ```bash
 npm test
 npm run synthetic:pilot
 ```
 
-Expected: every test passes and the synthetic pilot still proves interruption/resume/idempotent verification.
+Expected: all tests pass and the synthetic interruption/resume/idempotence proof remains green.
 
-- [ ] **Step 5: Perform a secret/capability regression scan**
-
-Run:
-
-```bash
-grep -RniE "chrome\.storage|document\.cookie|localStorage|sessionStorage|webRequest|nativeMessaging|<all_urls>|authorization[[:space:]]*:|cookie[[:space:]]*:" extension packages scripts docs --exclude-dir=node_modules
-```
-
-Expected: no newly introduced runtime authority or durable secret capture. Documentation may mention forbidden terms only as explicit non-goals/boundaries.
-
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add README.md docs/PILOT-RUNBOOK.md docs/TRUST-BOUNDARY.md docs/NETWORK-BEHAVIOR.md tests/extension-boundary.test.js
 git commit -m "docs: define the one-WAV human preservation gate"
 ```
 
-### Task 7: Human full-song WAV specimen and PR/GitBook reconciliation
+### Task 7: Run the real full-song WAV gate and reconcile truth state
 
-**Files:**
-- Modify after the specimen: `docs/PILOT-RUNBOOK.md` only if a real browser behavior correction is discovered.
-- GitBook: update CR #51 only with observed evidence; do not present unrun behavior as proof.
-- GitHub: update issue #8 / PR #9 with exact human evidence.
+**Files/records:**
+- GitHub: issue #8 and PR #9.
+- GitBook: CR #51.
+- Local/external Vault: one verified `audio_wav` specimen.
 
-**Interfaces:**
-- Consumes: B2C candidate build at an exact commit SHA.
-- Produces: one verified `audio_wav` receipt and evidence sufficient to decide whether the 25-track WAV design gate may open.
+- [ ] **Step 1: Keep PR #9 draft until exact-head automated verification is green**
 
-- [ ] **Step 1: Keep PR #9 draft until automated verification is green**
+Record the exact head SHA and green Actions run before field testing.
 
-Record exact head SHA and the green GitHub Actions run. Do not mark the PR ready merely because code exists.
+- [ ] **Step 2: Run one real signed-in Chrome specimen**
 
-- [ ] **Step 2: Run one real signed-in Chrome WAV specimen**
-
-The specimen passes only if:
+Pass criteria:
 
 ```text
 provider track ID present
 operator explicitly chooses WAV in Suno
-exactly one future WAV is bound
-completed local path ends in WAV evidence
+exactly one future WAV bound
+no ambiguity/refusal
+completed local WAV path captured
 pilot:admit uses assetRole=audio_wav
 RIFF/WAVE or RF64/WAVE sanity passes
 receipt state=verified
-final byteLength and SHA-256 independently agree
-final admitted file exists under the selected Vault root/external drive
+final file exists under selected external-drive Vault root
 no signed URL/query/fragment/cookie/auth/token/session/browser-storage material is durable
 25-track/full-corpus control remains disabled
 ```
 
-- [ ] **Step 3: Independently verify final bytes on Windows**
-
-From PowerShell, compute the final hash without relying on the Vault receipt:
+- [ ] **Step 3: Independently verify Windows bytes**
 
 ```powershell
 Get-FileHash -Algorithm SHA256 'E:\Autodiscography-Vault\assets\<provider-track-id>\audio_wav.wav'
 (Get-Item 'E:\Autodiscography-Vault\assets\<provider-track-id>\audio_wav.wav').Length
 ```
 
-Compare both values with the receipt output.
+Compare SHA-256 and byte length with the receipt.
 
-- [ ] **Step 4: Reconcile GitHub and GitBook truth state**
+- [ ] **Step 4: Reconcile GitHub and GitBook**
 
-Update PR #9 / issue #8 with the exact tested head, automated run, human track ID, byte length, SHA-256, and external-drive final path pattern. Update GitBook CR #51 from proposal language to human-witnessed proof only after the specimen passes.
+Update issue #8 / PR #9 with tested head, Actions run, provider track ID, byte length, SHA-256, and safe final-path pattern. Update GitBook CR #51 from proposal to human-witnessed proof only after the specimen passes.
 
 - [ ] **Step 5: Stop at the next authority gate**
 
-After the specimen passes, the next authorized work is a separate design for bounded multi-song WAV preservation. Do not silently enable the existing 25-track acquisition button or a full-corpus run in B2C.
+A successful B2C specimen authorizes a separate design for bounded multi-song WAV preservation. It does not enable 25-track or full-corpus acquisition by itself.
