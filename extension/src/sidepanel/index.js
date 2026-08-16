@@ -386,17 +386,16 @@ async function observeDownloadChanges(delta) {
   if (delta.state.current === 'complete') {
     const completed = activeDownload;
     activeDownload = null;
+    armedWavWitness = null;
 
     try {
       const item = await completedDownloadItem(completed.downloadId);
       if (completed.mode === 'user_wav' && !isWavDownloadItem(item)) {
-        armedWavWitness = null;
         transportStatus.textContent = 'WAV witness refused: completed download no longer has WAV evidence.';
         renderLiveObservation(latestObservation);
         return;
       }
 
-      armedWavWitness = null;
       recordCompletedStaging(completed, item.filename);
       const requestEvidence = completed.requestDescriptorSha256
         ? `request ${completed.requestDescriptorSha256}`
@@ -404,7 +403,6 @@ async function observeDownloadChanges(delta) {
       transportStatus.textContent = `Staged: ${item.filename}. Run ${completed.runId}; Observed at ${completed.observedAt}; track ${completed.providerTrackId}; role ${completed.assetRole}; ${requestEvidence}. Admit these local bytes with pilot:admit.`;
       renderLiveObservation(latestObservation);
     } catch {
-      armedWavWitness = null;
       clearCompletedStaging();
       transportStatus.textContent = completed.mode === 'user_wav'
         ? 'WAV witness refused: completed download could not be resolved safely.'
