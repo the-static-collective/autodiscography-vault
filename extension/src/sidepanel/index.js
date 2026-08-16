@@ -149,8 +149,8 @@ async function requestLiveObservation() {
 }
 
 async function requestTransportPermission() {
-  if (!globalThis.chrome?.permissions?.request || !globalThis.chrome?.downloads?.download) {
-    transportStatus.textContent = 'Transport unavailable: browser download capability not present.';
+  if (!globalThis.chrome?.permissions?.request) {
+    transportStatus.textContent = 'Transport unavailable: browser runtime permission capability not present.';
     return;
   }
 
@@ -161,6 +161,17 @@ async function requestTransportPermission() {
       transportStatus.textContent = 'Transport refused: transport_permission_denied. Observation remains available.';
       renderLiveObservation(latestObservation);
       return;
+    }
+
+    if (!globalThis.chrome?.downloads?.download) {
+      transportEnabled = false;
+      transportStatus.textContent = 'Transport unavailable: downloads permission granted but browser download capability not present.';
+      renderLiveObservation(latestObservation);
+      return;
+    }
+
+    if (globalThis.chrome?.downloads?.onChanged) {
+      chrome.downloads.onChanged.addListener(observeDownloadChanges);
     }
 
     transportEnabled = true;
@@ -245,5 +256,4 @@ function observeDownloadChanges(delta) {
 
 refreshLive.addEventListener('click', requestLiveObservation);
 enableTransport.addEventListener('click', requestTransportPermission);
-if (globalThis.chrome?.downloads?.onChanged) chrome.downloads.onChanged.addListener(observeDownloadChanges);
 renderSyntheticProof();
