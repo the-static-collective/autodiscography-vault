@@ -1,4 +1,5 @@
 import { listSyntheticTracks } from '../provider/suno/fixture-adapter.js';
+import { formatPowerShellAdmitCommand } from './powershell-handoff.js';
 import { bindCreatedWav, isWavDownloadItem } from './wav-witness.js';
 
 const syntheticHost = document.querySelector('#tracks');
@@ -8,12 +9,16 @@ const liveCount = document.querySelector('#live-count');
 const refreshLive = document.querySelector('#refresh-live');
 const enableTransport = document.querySelector('#enable-transport');
 const transportStatus = document.querySelector('#transport-status');
+const vaultRootInput = document.querySelector('#vault-root');
+const admitCommand = document.querySelector('#admit-command');
+const copyAdmitCommand = document.querySelector('#copy-admit-command');
 
 let latestObservation = null;
 let transportEnabled = false;
 let selectedProviderTrackId = null;
 let activeDownload = null;
 let armedWavWitness = null;
+let completedStaging = null;
 
 function appendField(article, label, value) {
   const row = document.createElement('p');
@@ -72,6 +77,53 @@ function extensionForAsset(asset) {
     }
   }
   return 'bin';
+}
+
+function renderAdmissionHandoff() {
+  const vaultRoot = vaultRootInput?.value?.trim() ?? '';
+  if (!completedStaging || !vaultRoot) {
+    admitCommand.textContent = 'Complete one staged asset and enter a Vault root to build the admission command.';
+    copyAdmitCommand.disabled = true;
+    return;
+  }
+
+  try {
+    const command = formatPowerShellAdmitCommand({
+      stagedFile: completedStaging.stagedFile,
+      vaultRoot,
+      runId: completedStaging.runId,
+      providerTrackId: completedStaging.providerTrackId,
+      assetRole: completedStaging.assetRole,
+      observedAt: completedStaging.observedAt,
+      ...(completedStaging.requestDescriptorSha256 === undefined
+        ? {}
+        : { requestDescriptorSha256: completedStaging.requestDescriptorSha256 }),
+    });
+    admitCommand.textContent = command;
+    copyAdmitCommand.disabled = false;
+  } catch {
+    admitCommand.textContent = 'Admission handoff refused: local path or witness value is unsafe.';
+    copyAdmitCommand.disabled = true;
+  }
+}
+
+function clearCompletedStaging() {
+  completedStaging = null;
+  renderAdmissionHandoff();
+}
+
+function recordCompletedStaging(completed, stagedFile) {
+  completedStaging = Object.freeze({
+    stagedFile,
+    runId: completed.runId,
+    providerTrackId: completed.providerTrackId,
+    assetRole: completed.assetRole,
+    observedAt: completed.observedAt,
+    ...(completed.requestDescriptorSha256 === undefined
+      ? {}
+      : { requestDescriptorSha256: completed.requestDescriptorSha256 }),
+  });
+  renderAdmissionHandoff();
 }
 
 function armWavButton(track) {
@@ -222,6 +274,7 @@ function armWavWitness(track) {
     return;
   }
 
+  clearCompletedStaging();
   selectedProviderTrackId = track.providerTrackId;
   armedWavWitness = Object.freeze({
     runId: runId(),
@@ -286,6 +339,7 @@ async function stageObservedAsset(track, asset) {
     return;
   }
 
+  clearCompletedStaging();
   selectedProviderTrackId = track.providerTrackId;
   const currentRunId = runId();
   const safeTrackId = safePathSegment(track.providerTrackId, 'unknown-track');
@@ -318,6 +372,14 @@ async function stageObservedAsset(track, asset) {
   }
 }
 
+async function completedDownloadItem(downloadId) {
+  const [item] = await chrome.downloads.search({ id: downloadId });
+  if (!item || typeof item.filename !== 'string' || !item.filename) {
+    throw new Error('completed download path unavailable');
+  }
+  return item;
+}
+
 async function observeDownloadChanges(delta) {
   if (!activeDownload || delta?.id !== activeDownload.downloadId || !delta.state?.current) return;
 
@@ -325,37 +387,52 @@ async function observeDownloadChanges(delta) {
     const completed = activeDownload;
     activeDownload = null;
 
-    if (completed.mode === 'user_wav') {
-      try {
-        const [item] = await chrome.downloads.search({ id: completed.downloadId });
-        if (!item || !isWavDownloadItem(item) || typeof item.filename !== 'string' || !item.filename) {
-          armedWavWitness = null;
-          transportStatus.textContent = 'WAV witness refused: completed download no longer has WAV evidence.';
-          renderLiveObservation(latestObservation);
-          return;
-        }
+    try {
+      const item = await completedDownloadItem(completed.downloadId);
+      if (completed.mode === 'user_wav' && !isWavDownloadItem(item)) {
         armedWavWitness = null;
-        transportStatus.textContent = `Staged: ${item.filename}. Run ${completed.runId}; Observed at ${completed.observedAt}; track ${completed.providerTrackId}; role audio_wav; request descriptor unavailable by design. Admit these local bytes with pilot:admit.`;
-        renderLiveObservation(latestObservation);
-        return;
-      } catch {
-        armedWavWitness = null;
-        transportStatus.textContent = 'WAV witness refused: completed download could not be resolved safely.';
+        transportStatus.textContent = 'WAV witness refused: completed download no longer has WAV evidence.';
         renderLiveObservation(latestObservation);
         return;
       }
-    }
 
-    transportStatus.textContent = `Staged: ${completed.filename}. Run ${completed.runId}; Observed at ${completed.observedAt}; track ${completed.providerTrackId}; role ${completed.assetRole}; request ${completed.requestDescriptorSha256}. Admit these local bytes with pilot:admit.`;
-    renderLiveObservation(latestObservation);
+      armedWavWitness = null;
+      recordCompletedStaging(completed, item.filename);
+      const requestEvidence = completed.requestDescriptorSha256
+        ? `request ${completed.requestDescriptorSha256}`
+        : 'request descriptor unavailable by design';
+      transportStatus.textContent = `Staged: ${item.filename}. Run ${completed.runId}; Observed at ${completed.observedAt}; track ${completed.providerTrackId}; role ${completed.assetRole}; ${requestEvidence}. Admit these local bytes with pilot:admit.`;
+      renderLiveObservation(latestObservation);
+    } catch {
+      armedWavWitness = null;
+      clearCompletedStaging();
+      transportStatus.textContent = completed.mode === 'user_wav'
+        ? 'WAV witness refused: completed download could not be resolved safely.'
+        : 'Transport completed but the local staged path could not be resolved safely.';
+      renderLiveObservation(latestObservation);
+    }
   } else if (delta.state.current === 'interrupted') {
     activeDownload = null;
     armedWavWitness = null;
+    clearCompletedStaging();
     transportStatus.textContent = 'Transport interrupted. No durable Vault receipt exists.';
     renderLiveObservation(latestObservation);
   }
 }
 
+async function copyAdmissionCommand() {
+  if (copyAdmitCommand.disabled) return;
+  try {
+    await navigator.clipboard.writeText(admitCommand.textContent);
+    transportStatus.textContent = 'Admission command copied. Run it from the Autodiscography Vault repository root.';
+  } catch {
+    transportStatus.textContent = 'Copy unavailable; command remains visible.';
+  }
+}
+
 refreshLive.addEventListener('click', requestLiveObservation);
 enableTransport.addEventListener('click', requestTransportPermission);
+vaultRootInput.addEventListener('input', renderAdmissionHandoff);
+copyAdmitCommand.addEventListener('click', copyAdmissionCommand);
+renderAdmissionHandoff();
 renderSyntheticProof();
