@@ -32,6 +32,16 @@
       <button id="acquire-pilot" type="button" disabled>Acquire 25-track pilot — 25-track transport remains locked pending one-track WAV witness</button>
     </section>
 
+    <section class="gate" aria-labelledby="admission-heading">
+      <h2 id="admission-heading">Temporary local admission handoff</h2>
+      <p>This is temporary Phase B2C proof ceremony. A later local companion will remove this command-line step while preserving the same exact-byte admission boundary.</p>
+      <label for="vault-root">Vault root for local admission</label>
+      <input id="vault-root" type="text" autocomplete="off" spellcheck="false" placeholder="E:\Autodiscography-Vault">
+      <p>After one file finishes staging, Vault will build a safe one-line PowerShell command from the completed local filename and bounded witness fields.</p>
+      <pre id="admit-command" aria-live="polite">Complete one staged asset and enter a Vault root to build the admission command.</pre>
+      <button id="copy-admit-command" type="button" disabled>Copy pilot:admit command</button>
+    </section>
+
     <section aria-labelledby="proposal-heading">
       <h2 id="proposal-heading">Synthetic Phase-A proof</h2>
       <p>The original fixture-backed proposal remains visible as a local preservation-floor witness.</p>
