@@ -40,3 +40,23 @@ test('Phase B2 side panel requests downloads permission only from the extension 
     assert.equal(forbidden.test(js), false, `side panel must not contain ${forbidden}`);
   }
 });
+
+test('optional downloads permission is requested before the gated downloads API is required', async () => {
+  const js = await text('../extension/src/sidepanel/index.js');
+  const start = js.indexOf('async function requestTransportPermission()');
+  const end = js.indexOf('async function stageObservedAsset', start);
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+
+  const fn = js.slice(start, end);
+  const requestIndex = fn.indexOf('chrome.permissions.request');
+  assert.notEqual(requestIndex, -1);
+
+  const beforeGrant = fn.slice(0, requestIndex);
+  assert.equal(/chrome\?\.downloads\?\.download|chrome\.downloads\.download/.test(beforeGrant), false,
+    'downloads API must not be required before the optional downloads permission request');
+
+  const afterGrant = fn.slice(requestIndex);
+  assert.match(afterGrant, /chrome\?\.downloads\?\.download|chrome\.downloads\.download/,
+    'downloads API availability should be checked after the optional permission grant');
+});
