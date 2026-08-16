@@ -83,18 +83,18 @@ Classification rules are evidence-based:
 
 For a browser-download witness, Phase B2C must bind the download to a fresh one-shot arm created by a user gesture. At most one active WAV witness may exist at a time. Completion or interruption clears the arm.
 
-The durable record may contain only the same bounded evidence already allowed by B2:
+The durable record may contain only bounded evidence already compatible with the acquisition contract:
 
 - provider track ID;
 - asset role;
 - observation timestamp;
 - run ID;
-- safe request descriptor hash when a request descriptor exists;
+- `requestDescriptorSha256` only when a real safe request descriptor exists;
 - final local byte identity after admission.
 
 Exact signed URLs, query strings, fragments, cookies, authorization headers, tokens, session material, and browser storage remain forbidden from durable receipts/manifests.
 
-If a browser-download surface does not provide a safe request descriptor without exposing reusable capability, `requestDescriptorSha256` must not be fabricated. The existing durable contract should be used as-is only where its invariants permit; otherwise the implementation plan must define a bounded evidence representation before code changes begin.
+If the WAV is witnessed only as an operator-triggered Chrome download, no request descriptor is invented. In that path, `requestDescriptorSha256` is omitted. The acquisition contract already permits that field to be absent; the current `pilot:admit` CLI is stricter than the contract and therefore must be relaxed during implementation to require the hash only when one was actually witnessed.
 
 ## Local admission and external drive
 
@@ -147,10 +147,11 @@ Implementation should be decomposed into observable RED → GREEN gates:
 
 1. **Vocabulary/classifier gate** — `audio_wav` is proposed and real `.wav` / `audio/wav` surfaces classify correctly while MP3/artwork behavior remains unchanged.
 2. **One-shot browser witness gate** — only an explicitly armed, newly created WAV download can bind to the selected track/run; unrelated/historical downloads are ignored.
-3. **Completion gate** — completed WAV exposes a bounded staged witness; interruption clears state without a verified receipt.
-4. **WAV admission gate** — RIFF/WAVE and RF64/WAVE staged bytes may be admitted as `audio_wav`; obvious non-WAV bytes are refused before journal mutation.
-5. **Windows operator gate** — safe PowerShell handoff evidence is copyable without signed URL/session material.
-6. **Real human specimen** — one normal signed-in Suno full-song WAV is downloaded, admitted to a local/external-drive Vault root, and independently reverified.
+3. **Completion/evidence gate** — completed WAV exposes a bounded staged witness; interruption clears state without a verified receipt; browser-download WAVs omit `requestDescriptorSha256` rather than fabricating one.
+4. **CLI parity gate** — `pilot:admit` accepts absence of `requestDescriptorSha256` when the durable acquisition contract permits it, while preserving validation when a hash is supplied.
+5. **WAV admission gate** — RIFF/WAVE and RF64/WAVE staged bytes may be admitted as `audio_wav`; obvious non-WAV bytes are refused before journal mutation.
+6. **Windows operator gate** — safe PowerShell handoff evidence is copyable without signed URL/session material.
+7. **Real human specimen** — one normal signed-in Suno full-song WAV is downloaded, admitted to a local/external-drive Vault root, and independently reverified.
 
 ## Human acceptance specimen
 
@@ -165,6 +166,7 @@ The one-WAV gate passes only when a real signed-in Chrome run proves all of the 
 - receipt byte length and SHA-256 match an independent final-file verification;
 - the final admitted file exists under the chosen Vault root, including an external drive if selected;
 - durable outputs contain no exact signed URL/query/fragment, cookie, authorization header, token, session material, or browser storage;
+- `requestDescriptorSha256` is present only when backed by a real safe request descriptor and otherwise absent;
 - existing artwork and MP3 observation/admission tests remain green;
 - 25-track/full-corpus acquisition remains disabled.
 
