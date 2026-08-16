@@ -76,6 +76,11 @@ test('one-shot WAV witness binds a future Chrome download without persisting tra
   assert.match(js, /wav_witness_ambiguous/);
   assert.match(js, /request descriptor unavailable by design/i);
   assert.match(js, /armedWavWitness/);
-  assert.equal(/activeDownload\s*=\s*Object\.freeze\([\s\S]*?\b(?:url|finalUrl|referrer)\s*:/.test(js), false,
-    'bound active download state must not carry URL/referrer capability');
+
+  const assignments = [...js.matchAll(/activeDownload\s*=\s*Object\.freeze\(\{([\s\S]*?)\}\);/g)];
+  assert.ok(assignments.length >= 2, 'both direct and user-WAV active download states should be explicit');
+  for (const [, body] of assignments) {
+    assert.equal(/\b(?:url|finalUrl|referrer)\s*:/.test(body), false,
+      'bound active download state must not carry URL/referrer capability');
+  }
 });
