@@ -177,3 +177,48 @@ test('aggregation happens before the 25-track cap', () => {
   assert.equal(extracted.candidates.length, 25);
   assert.equal(extracted.candidates[0].title, 'Track One Enriched');
 });
+
+test('WAV is proposed and explicit audio/wav surfaces classify as audio_wav', () => {
+  const observer = loadObserver();
+  const wavUrl = 'https://cdn.example.test/track-wav.wav?sig=ephemeral-secret#download';
+  const node = element({
+    tagName: 'DIV',
+    attributes: { 'data-song-id': 'track-wav', 'data-title': 'WAV Track' },
+    children: [
+      element({ tagName: 'A', attributes: { href: 'https://suno.com/song/track-wav' } }),
+      element({ tagName: 'SOURCE', attributes: { src: wavUrl, type: 'audio/wav' } }),
+    ],
+  });
+
+  const extracted = observer.extractSunoCandidates({ querySelectorAll: () => [node] });
+  const observation = observer.buildLiveObservation({
+    origin: 'https://suno.com',
+    candidates: extracted.candidates,
+    candidateNodeCount: extracted.candidateNodeCount,
+    observedAt: '2026-08-15T21:00:00.000Z',
+  });
+
+  assert.equal(observation.tracks[0].proposedAssets.includes('audio_wav'), true);
+  const wav = observation.tracks[0].observedAssets.find(asset => asset.assetRole === 'audio_wav');
+  assert.ok(wav);
+  assert.equal(wav.transportUrl, wavUrl);
+  assert.equal(wav.requestPreview.includes('ephemeral-secret'), false);
+  assert.match(wav.requestPreview, /asset=audio_wav$/);
+});
+
+test('WAV link classifies as audio_wav while unknown audio remains other', () => {
+  const observer = loadObserver();
+  const node = element({
+    tagName: 'DIV',
+    attributes: { 'data-song-id': 'track-wav-link' },
+    children: [
+      element({ tagName: 'A', attributes: { href: 'https://suno.com/song/track-wav-link' } }),
+      element({ tagName: 'A', attributes: { href: 'https://cdn.example.test/master.wav?sig=ephemeral' } }),
+      element({ tagName: 'SOURCE', attributes: { src: 'https://cdn.example.test/master.aac', type: 'audio/aac' } }),
+    ],
+  });
+
+  const extracted = observer.extractSunoCandidates({ querySelectorAll: () => [node] });
+  assert.equal(extracted.candidates[0].observedAssets.some(asset => asset.assetRole === 'audio_wav'), true);
+  assert.equal(extracted.candidates[0].observedAssets.some(asset => asset.assetRole === 'other'), true);
+});
