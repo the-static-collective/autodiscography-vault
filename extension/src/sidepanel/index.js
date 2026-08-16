@@ -1,4 +1,5 @@
 import { listSyntheticTracks } from '../provider/suno/fixture-adapter.js';
+import { bindCreatedWav, isWavDownloadItem } from './wav-witness.js';
 
 const syntheticHost = document.querySelector('#tracks');
 const liveHost = document.querySelector('#live-tracks');
@@ -12,6 +13,7 @@ let latestObservation = null;
 let transportEnabled = false;
 let selectedProviderTrackId = null;
 let activeDownload = null;
+let armedWavWitness = null;
 
 function appendField(article, label, value) {
   const row = document.createElement('p');
@@ -59,6 +61,7 @@ function runId() {
 
 function extensionForAsset(asset) {
   if (asset?.assetRole === 'audio_mp3') return 'mp3';
+  if (asset?.assetRole === 'audio_wav') return 'wav';
   if (asset?.assetRole === 'artwork') {
     try {
       const match = new URL(asset.transportUrl).pathname.match(/\.([A-Za-z0-9]{2,5})$/);
@@ -71,12 +74,22 @@ function extensionForAsset(asset) {
   return 'bin';
 }
 
+function armWavButton(track) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'transport-one witness-wav';
+  button.textContent = transportEnabled ? 'Witness one WAV' : 'Witness one WAV — enable transport first';
+  button.disabled = !transportEnabled || !track.providerTrackId || Boolean(activeDownload) || Boolean(armedWavWitness);
+  button.addEventListener('click', () => armWavWitness(track));
+  return button;
+}
+
 function transportButton(track, asset) {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'transport-one';
   button.textContent = transportEnabled ? `Stage this ${asset.assetRole}` : `Stage this ${asset.assetRole} — enable transport first`;
-  button.disabled = !transportEnabled || !track.providerTrackId || Boolean(activeDownload);
+  button.disabled = !transportEnabled || !track.providerTrackId || Boolean(activeDownload) || Boolean(armedWavWitness);
   button.addEventListener('click', () => stageObservedAsset(track, asset));
   return button;
 }
@@ -120,6 +133,7 @@ function renderLiveObservation(observation) {
 
     const observedAssets = Array.isArray(track.observedAssets) ? track.observedAssets : [];
     appendField(article, 'Observed transport surfaces', observedAssets.length ? String(observedAssets.length) : 'none');
+    article.append(armWavButton(track));
     for (const asset of observedAssets) renderObservedAsset(article, track, asset);
     liveHost.append(article);
   }
@@ -163,26 +177,90 @@ async function requestTransportPermission() {
       return;
     }
 
-    if (!globalThis.chrome?.downloads?.download) {
+    if (
+      !globalThis.chrome?.downloads?.download
+      || !globalThis.chrome?.downloads?.search
+      || !globalThis.chrome?.downloads?.onCreated
+      || !globalThis.chrome?.downloads?.onChanged
+    ) {
       transportEnabled = false;
-      transportStatus.textContent = 'Transport unavailable: downloads permission granted but browser download capability not present.';
+      transportStatus.textContent = 'Transport unavailable: downloads permission granted but required browser download capabilities are not present.';
       renderLiveObservation(latestObservation);
       return;
     }
 
-    if (globalThis.chrome?.downloads?.onChanged) {
-      chrome.downloads.onChanged.addListener(observeDownloadChanges);
-    }
+    chrome.downloads.onCreated.addListener(observeCreatedDownload);
+    chrome.downloads.onChanged.addListener(observeDownloadChanges);
 
     transportEnabled = true;
     enableTransport.disabled = true;
     enableTransport.textContent = 'Pilot transport enabled';
-    transportStatus.textContent = 'Transport enabled for one-track staging. Choose one observed asset.';
+    transportStatus.textContent = 'Transport enabled for one-track staging. Choose one observed asset or arm one WAV witness.';
     renderLiveObservation(latestObservation);
   } catch {
     transportEnabled = false;
     transportStatus.textContent = 'Transport refused: transport_permission_denied. Observation remains available.';
   }
+}
+
+function armWavWitness(track) {
+  if (!transportEnabled) {
+    transportStatus.textContent = 'Transport locked. Press Enable pilot transport first.';
+    return;
+  }
+  const observedAt = latestObservation?.observedAt;
+  if (!track?.providerTrackId || !observedAt) {
+    transportStatus.textContent = 'WAV witness refused: provider track identity and observation timestamp are required.';
+    return;
+  }
+  if (selectedProviderTrackId && selectedProviderTrackId !== track.providerTrackId) {
+    transportStatus.textContent = `WAV witness refused: this Phase B2 session is already bound to provider track ${selectedProviderTrackId}.`;
+    return;
+  }
+  if (activeDownload || armedWavWitness) {
+    transportStatus.textContent = 'WAV witness refused: another one-track transport is already active.';
+    return;
+  }
+
+  selectedProviderTrackId = track.providerTrackId;
+  armedWavWitness = Object.freeze({
+    runId: runId(),
+    providerTrackId: track.providerTrackId,
+    observedAt,
+    armedAtMs: Date.now(),
+  });
+  transportStatus.textContent = `WAV witness armed for track ${track.providerTrackId}. In Suno, choose Download → WAV now.`;
+  renderLiveObservation(latestObservation);
+}
+
+function observeCreatedDownload(item) {
+  if (!armedWavWitness) return;
+  const result = bindCreatedWav({
+    arm: armedWavWitness,
+    activeDownloadId: activeDownload?.mode === 'user_wav' ? activeDownload.downloadId : null,
+    item,
+  });
+
+  if (result.status === 'ambiguous') {
+    activeDownload = null;
+    armedWavWitness = null;
+    transportStatus.textContent = 'WAV witness refused: wav_witness_ambiguous. More than one matching WAV began before the one-shot witness resolved.';
+    renderLiveObservation(latestObservation);
+    return;
+  }
+  if (result.status !== 'bound') return;
+
+  activeDownload = Object.freeze({
+    mode: 'user_wav',
+    downloadId: result.downloadId,
+    runId: armedWavWitness.runId,
+    providerTrackId: armedWavWitness.providerTrackId,
+    assetRole: 'audio_wav',
+    observedAt: armedWavWitness.observedAt,
+    filename: result.filename,
+  });
+  transportStatus.textContent = `WAV download witnessed for track ${activeDownload.providerTrackId}; Chrome download ${activeDownload.downloadId}. Waiting for completion.`;
+  renderLiveObservation(latestObservation);
 }
 
 async function stageObservedAsset(track, asset) {
@@ -203,8 +281,8 @@ async function stageObservedAsset(track, asset) {
     transportStatus.textContent = `Transport refused: this Phase B2 session is already bound to provider track ${selectedProviderTrackId}.`;
     return;
   }
-  if (activeDownload) {
-    transportStatus.textContent = `Transport already active for Chrome download ${activeDownload.downloadId}.`;
+  if (activeDownload || armedWavWitness) {
+    transportStatus.textContent = 'Transport refused: another one-track transport is already active.';
     return;
   }
 
@@ -222,6 +300,7 @@ async function stageObservedAsset(track, asset) {
       saveAs: false,
     });
     activeDownload = Object.freeze({
+      mode: 'observed_asset',
       downloadId,
       runId: currentRunId,
       providerTrackId: track.providerTrackId,
@@ -239,16 +318,39 @@ async function stageObservedAsset(track, asset) {
   }
 }
 
-function observeDownloadChanges(delta) {
+async function observeDownloadChanges(delta) {
   if (!activeDownload || delta?.id !== activeDownload.downloadId || !delta.state?.current) return;
 
   if (delta.state.current === 'complete') {
     const completed = activeDownload;
     activeDownload = null;
+
+    if (completed.mode === 'user_wav') {
+      try {
+        const [item] = await chrome.downloads.search({ id: completed.downloadId });
+        if (!item || !isWavDownloadItem(item) || typeof item.filename !== 'string' || !item.filename) {
+          armedWavWitness = null;
+          transportStatus.textContent = 'WAV witness refused: completed download no longer has WAV evidence.';
+          renderLiveObservation(latestObservation);
+          return;
+        }
+        armedWavWitness = null;
+        transportStatus.textContent = `Staged: ${item.filename}. Run ${completed.runId}; Observed at ${completed.observedAt}; track ${completed.providerTrackId}; role audio_wav; request descriptor unavailable by design. Admit these local bytes with pilot:admit.`;
+        renderLiveObservation(latestObservation);
+        return;
+      } catch {
+        armedWavWitness = null;
+        transportStatus.textContent = 'WAV witness refused: completed download could not be resolved safely.';
+        renderLiveObservation(latestObservation);
+        return;
+      }
+    }
+
     transportStatus.textContent = `Staged: ${completed.filename}. Run ${completed.runId}; Observed at ${completed.observedAt}; track ${completed.providerTrackId}; role ${completed.assetRole}; request ${completed.requestDescriptorSha256}. Admit these local bytes with pilot:admit.`;
     renderLiveObservation(latestObservation);
   } else if (delta.state.current === 'interrupted') {
     activeDownload = null;
+    armedWavWitness = null;
     transportStatus.textContent = 'Transport interrupted. No durable Vault receipt exists.';
     renderLiveObservation(latestObservation);
   }
