@@ -17,8 +17,10 @@ function waveHeader(container) {
 }
 
 test('RIFF/WAVE and RF64/WAVE headers pass the bounded container sanity gate', async () => {
-  await assert.doesNotReject(() => assertWavContainer(await staged(waveHeader('RIFF'), 'riff.wav')));
-  await assert.doesNotReject(() => assertWavContainer(await staged(waveHeader('RF64'), 'rf64.wav')));
+  const riffPath = await staged(waveHeader('RIFF'), 'riff.wav');
+  const rf64Path = await staged(waveHeader('RF64'), 'rf64.wav');
+  await assert.doesNotReject(() => assertWavContainer(riffPath));
+  await assert.doesNotReject(() => assertWavContainer(rf64Path));
 });
 
 test('obvious non-WAV bytes are refused', async () => {
