@@ -21,6 +21,19 @@ async function fixture() {
   return { root, stagedFile, vaultRoot, bytes };
 }
 
+async function wavFixture({ valid = true } = {}) {
+  const root = await mkdtemp(join(tmpdir(), 'vault-b2c-wav-admit-'));
+  const staging = join(root, 'Downloads');
+  const vaultRoot = join(root, 'vault');
+  await mkdir(staging, { recursive: true });
+  const stagedFile = join(staging, 'master.wav');
+  const bytes = valid
+    ? Buffer.concat([Buffer.from('RIFF', 'ascii'), Buffer.alloc(4), Buffer.from('WAVE', 'ascii'), Buffer.from('exact-wave-payload')])
+    : Buffer.from('not-a-wave-container', 'utf8');
+  await writeFile(stagedFile, bytes);
+  return { stagedFile, vaultRoot, bytes };
+}
+
 function options({ stagedFile, vaultRoot }) {
   return {
     stagedFile,
@@ -71,6 +84,43 @@ test('staged bytes are verified, atomically promoted, journaled, handed off, and
     () => admitStagedAsset(options({ stagedFile, vaultRoot })),
     /verification mismatch/,
   );
+});
+
+test('user-triggered WAV may omit a nonexistent request descriptor and still admit exact bytes', async () => {
+  const { stagedFile, vaultRoot, bytes } = await wavFixture();
+  const result = await admitStagedAsset({
+    stagedFile,
+    vaultRoot,
+    runId: 'suno-b2c-wav-test',
+    providerTrackId: 'track-wav',
+    assetRole: 'audio_wav',
+    observedAt,
+  });
+
+  assert.equal(result.receipt.assetRole, 'audio_wav');
+  assert.equal(result.receipt.byteLength, bytes.length);
+  assert.equal('requestDescriptorSha256' in result.receipt, false);
+  assert.equal(result.receipt.sourceRelativePath, 'assets/track-wav/audio_wav.wav');
+
+  const handoff = JSON.parse(await readFile(join(vaultRoot, 'receipts', 'handoff.json'), 'utf8'));
+  assert.equal(handoff.records[0].requestDescriptorSha256, null);
+});
+
+test('fake .wav bytes are refused before a verified journal can be created', async () => {
+  const { stagedFile, vaultRoot } = await wavFixture({ valid: false });
+  const journalPath = join(vaultRoot, 'receipts', 'acquisition.jsonl');
+  await assert.rejects(
+    () => admitStagedAsset({
+      stagedFile,
+      vaultRoot,
+      runId: 'suno-b2c-fake-wav',
+      providerTrackId: 'track-fake-wav',
+      assetRole: 'audio_wav',
+      observedAt,
+    }),
+    /invalid WAV container/,
+  );
+  assert.equal(existsSync(journalPath), false);
 });
 
 test('invalid local admission inputs fail before journal mutation', async () => {

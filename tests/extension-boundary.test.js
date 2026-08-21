@@ -6,7 +6,7 @@ async function text(path) {
   return readFile(new URL(path, import.meta.url), 'utf8');
 }
 
-test('MV3 Phase B2 keeps transport optional and Suno witness permanent', async () => {
+test('MV3 Phase B2C keeps transport optional and Suno witness permanent', async () => {
   const manifest = JSON.parse(await text('../extension/manifest.json'));
   assert.equal(manifest.manifest_version, 3);
   assert.equal('host_permissions' in manifest, false);
@@ -26,7 +26,7 @@ test('MV3 Phase B2 keeps transport optional and Suno witness permanent', async (
   ]);
 
   const serialized = JSON.stringify(manifest);
-  for (const forbidden of ['cookies', 'webRequest', 'declarativeNetRequest', '<all_urls>']) {
+  for (const forbidden of ['cookies', 'webRequest', 'declarativeNetRequest', '<all_urls>', 'nativeMessaging', 'clipboardWrite']) {
     assert.equal(serialized.includes(forbidden), false, `manifest must not request ${forbidden}`);
   }
 });
@@ -51,4 +51,32 @@ test('provider witness remains observation-only after Phase B2 transport is adde
   const observer = await text('../extension/src/provider/suno/live-observer.js');
   const source = `${contentScript}\n${observer}`;
   assert.equal(/\bfetch\s*\(|XMLHttpRequest|WebSocket|chrome\.cookies|document\.cookie|webRequest|chrome\.downloads/i.test(source), false);
+});
+
+test('Phase B2C WAV and Windows handoff paths do not acquire durable browser/session authority', async () => {
+  const html = await text('../extension/src/sidepanel/index.html');
+  const panel = await text('../extension/src/sidepanel/index.js');
+  const wavWitness = await text('../extension/src/sidepanel/wav-witness.js');
+  const handoff = await text('../extension/src/sidepanel/powershell-handoff.js');
+  const source = `${panel}\n${wavWitness}\n${handoff}`;
+
+  assert.match(html, /id="acquire-pilot"[^>]*disabled/i);
+  assert.match(html, /25-track[^<]*(?:closed|disabled|locked)|(?:closed|disabled|locked)[^<]*25-track/i);
+
+  for (const forbidden of [
+    /chrome\.storage/,
+    /localStorage/,
+    /sessionStorage/,
+    /document\.cookie/,
+    /chrome\.cookies/,
+    /webRequest/,
+    /nativeMessaging/,
+    /XMLHttpRequest/,
+    /WebSocket/,
+  ]) {
+    assert.equal(forbidden.test(source), false, `B2C runtime must not contain ${forbidden}`);
+  }
+
+  assert.equal(/\b(?:url|finalUrl|referrer)\s*:/.test(handoff), false,
+    'PowerShell handoff must have no URL/referrer fields');
 });

@@ -2,7 +2,7 @@
 
 Local-first preservation instrument for the Static Collective's Autodiscography corpus.
 
-**Current state: Phase B2 — one-track browser transport into exact local admission. Automated proof is green; the signed-in human specimen is still pending.**
+**Current state: Phase B2C — one full-song WAV preservation candidate. The earlier Phase-B2 one-track browser/local membrane has a real human artwork specimen; the current gate is one real signed-in full-song WAV.**
 
 The external preservation deadline recorded by the project is **September 3, 2026**. Urgency may accelerate transport work; it does not widen the trust boundary.
 
@@ -11,28 +11,31 @@ The external preservation deadline recorded by the project is **September 3, 202
 ## What exists now
 
 - Manifest V3 Chromium side panel;
-- a permanent, read-only content script limited to `https://suno.com/*` and `https://www.suno.com/*`;
-- live DOM witness aggregation by provider identity, repairing sparse first-observation titles when richer duplicate evidence exists;
-- at most **25** proposed track candidates per observation;
+- a permanent read-only content script limited to `https://suno.com/*` and `https://www.suno.com/*`;
+- live DOM witness aggregation by provider identity before the 25-track observation cap;
 - `proposedAssets` kept distinct from actually observed media/link transport surfaces;
-- exact request preview whose durable identity excludes URL query/fragment material;
+- first-class `audio_wav` proposal/classification for honest `.wav` / WAV MIME surfaces;
 - Chrome `downloads` declared only as an optional permission and requested only from **Enable pilot transport**;
-- one-track, one-asset staging below `Downloads/Autodiscography-Vault/<run-id>/`;
-- local `pilot:admit` bridge through existing SHA-256/byte-length verification, `.partial` promotion, append-only journal, and handoff manifest;
-- durable `requestDescriptorSha256` evidence without durable exact transport URLs;
-- explicit `wrong_origin`, `no_tracks_observed`, `unsupported_page_shape`, `pilot_cap_reached`, and `reusable_auth_required` witness states/warnings;
-- explicit `verified`, `missing`, `partial`, `refused`, and `failed` acquisition states;
-- adversarial tests for corruption, torn journal writes, secret-shaped material, and permission/network creep.
+- direct one-asset staging for an actually observed transport URL;
+- a separate one-shot **Witness one WAV** arm for the operator's normal Suno Download → WAV action when no honest DOM WAV URL exists;
+- future-only Chrome WAV binding, explicit ambiguity refusal, and completed local filename lookup;
+- local `pilot:admit` exact-byte admission through SHA-256/byte-length verification, `.partial` promotion, append-only journal, and handoff manifest;
+- bounded RIFF/WAVE or RF64/WAVE sanity before an `audio_wav` verified receipt may be minted;
+- optional durable `requestDescriptorSha256`: preserved when an honest request descriptor exists, omitted rather than fabricated when the browser-download witness has none;
+- a temporary Windows handoff that builds a copyable `pilot:admit` command from safe local/evidence fields and an operator-selected Vault root;
+- an external drive may be the Node-side Vault root without granting the browser direct filesystem authority to that drive;
+- explicit verified/incomplete/refusal states and adversarial tests for corruption, torn journals, secret-shaped material, permission creep, and WAV mislabeling.
 
 ## What remains closed
 
 - **no 25-track transport button**;
 - no full-corpus acquisition;
+- no stems or Studio project export acquisition in B2C;
+- no hidden WAV endpoint reconstruction;
 - no cookies/session/token extraction;
 - no `webRequest`, authorization-header capture, browser-database access, or reusable session material;
 - no Native Messaging;
 - no telemetry, Vercel/server corpus hop, or third-party corpus upload;
-- no TranchNode, Exact Return, semantic-equivalence, lineage, or universal receipt ontology;
 - no real corpus material in Git.
 
 ## Verify locally
@@ -45,37 +48,27 @@ npm test
 npm run synthetic:pilot
 ```
 
-For a Chrome-staged specimen, local admission is:
+`pilot:admit` accepts local bytes and non-secret evidence only. It has no provider transport-URL argument. For a direct observed transport, `--request-descriptor-sha256` remains available. For a user-triggered WAV witness with no honest request descriptor, that flag is intentionally omitted.
 
-```bash
-npm run pilot:admit -- \
-  --staged-file <local-staged-file> \
-  --vault-root <local-vault-root> \
-  --run-id <run-id-shown-by-extension> \
-  --provider-track-id <provider-track-id> \
-  --asset-role <asset-role> \
-  --observed-at <canonical-UTC-ISO-time> \
-  --request-descriptor-sha256 <hash-shown-by-extension>
-```
+The extension now generates the Windows command after a completed staging event and a Vault root are supplied. The manual command is **temporary proof ceremony**; a later local companion is intended to remove the PowerShell step while reusing the same admission boundary.
 
-The command accepts local bytes and non-secret evidence only. It has no transport-URL argument.
+## Phase B2C human WAV witness
 
-## Phase B2 human witness
+Load `extension/` as an unpacked Chromium extension and sign in normally at Suno.
 
-Load `extension/` as an unpacked Chromium extension, sign in normally at the real Suno origin, open the library/page containing your tracks, and press **Refresh live witness**.
+1. Open the page containing the target song and press **Refresh live witness**.
+2. Confirm its real provider track ID and the displayed `Observed at` timestamp.
+3. Press **Enable pilot transport** and grant only Downloads.
+4. On exactly one track, press **Witness one WAV**.
+5. In Suno itself, use the normal Download → WAV action.
+6. Wait for Vault to report the completed absolute local `.wav` path.
+7. Enter the external-drive Vault root you actually want, for example `E:\Autodiscography-Vault` if that is the correct drive on the test machine.
+8. Copy the generated one-line PowerShell `pilot:admit` command and run it from the repository root.
+9. Confirm the resulting receipt is `assetRole: audio_wav` and `state: verified`.
+10. Independently compute the final file SHA-256 and byte length and compare them with the receipt.
+11. Inspect `receipts/acquisition.jsonl` and `receipts/handoff.json` and confirm they contain no signed URL/query/fragment, cookie, authorization header, token, session material, or browser storage.
 
-The required one-track specimen is:
-
-1. confirm a real title is enriched where duplicate DOM witnesses permit it;
-2. confirm at least one `observedAssets` surface exists;
-3. inspect the redacted request preview and SHA-256;
-4. press **Enable pilot transport** and grant only the optional Downloads capability;
-5. stage exactly one observed asset;
-6. run `pilot:admit` against that staged local file;
-7. independently confirm the final byte length/SHA-256 equals the receipt;
-8. inspect journal/handoff output and confirm no exact signed URL, query/fragment, cookie, header, token, or reusable session material appears.
-
-Until that specimen passes, **Acquire 25-track pilot remains disabled**.
+Until this specimen passes, **Acquire 25-track pilot remains disabled**.
 
 ## Operator boundary
 
@@ -87,8 +80,8 @@ Read before the human specimen:
 - [`docs/CORPUS-OS-HANDOFF.md`](docs/CORPUS-OS-HANDOFF.md)
 - [`SECURITY.md`](SECURITY.md)
 
-Design: [`docs/superpowers/specs/2026-08-15-phase-b2-one-track-transport-design.md`](docs/superpowers/specs/2026-08-15-phase-b2-one-track-transport-design.md)
+B2C design: [`docs/superpowers/specs/2026-08-15-phase-b2c-wav-preservation-design.md`](docs/superpowers/specs/2026-08-15-phase-b2c-wav-preservation-design.md)
 
-Implementation plan: [`docs/superpowers/plans/2026-08-15-phase-b2-one-track-transport.md`](docs/superpowers/plans/2026-08-15-phase-b2-one-track-transport.md)
+B2C implementation plan: [`docs/superpowers/plans/2026-08-15-phase-b2c-wav-preservation.md`](docs/superpowers/plans/2026-08-15-phase-b2c-wav-preservation.md)
 
-Tracking: [Vault issue #3](https://github.com/the-static-collective/autodiscography-vault/issues/3), downstream preservation program: [Corpus OS #4](https://github.com/the-static-collective/corpus-os/issues/4).
+Tracking: [Vault issue #8](https://github.com/the-static-collective/autodiscography-vault/issues/8), downstream preservation program: [Corpus OS #4](https://github.com/the-static-collective/corpus-os/issues/4).
