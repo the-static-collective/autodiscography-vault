@@ -24,7 +24,7 @@ export function bindCreatedWav({ arm, activeDownloadId = null, item } = {}) {
     return Object.freeze({ status: 'ignored' });
   }
   if (!referrerIsCompatible(item?.referrer)) return Object.freeze({ status: 'ignored' });
-  if (!Number.isInteger(item?.id) || typeof item?.filename !== 'string' || !item.filename) {
+  if (!Number.isInteger(item?.id) || typeof item?.filename !== 'string') {
     return Object.freeze({ status: 'ignored' });
   }
   if (activeDownloadId !== null) return Object.freeze({ status: 'ambiguous' });
@@ -33,6 +33,6 @@ export function bindCreatedWav({ arm, activeDownloadId = null, item } = {}) {
     status: 'bound',
     downloadId: item.id,
     filename: item.filename,
-    mime: typeof item.mime === 'string' ? item.mime : '',
+    mime: typeof item?.mime === 'string' ? item.mime : '',
   });
 }
