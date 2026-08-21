@@ -45,6 +45,17 @@ test('fresh WAV with absent referrer may bind and URL capability is not returned
   assert.equal('referrer' in result, false);
 });
 
+test('fresh MIME-identified WAV may bind before Chrome resolves its filename', () => {
+  const result = bindCreatedWav({
+    arm,
+    item: item({ filename: '', mime: 'audio/wav', referrer: '' }),
+  });
+  assert.equal(result.status, 'bound');
+  assert.equal(result.downloadId, 41);
+  assert.equal(result.filename, '');
+  assert.equal(result.mime, 'audio/wav');
+});
+
 test('second matching WAV while one is already bound fails closed as ambiguous', () => {
   const result = bindCreatedWav({ arm, activeDownloadId: 40, item: item({ id: 42 }) });
   assert.deepEqual(result, { status: 'ambiguous' });
