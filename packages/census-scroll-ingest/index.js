@@ -39,6 +39,7 @@ const SCROLL_METRIC_KEYS = Object.freeze([
   'viewportHeight',
 ]);
 const CANONICAL_UTC_ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+const REUSABLE_SECRET_VALUE = /\bbearer\s+[A-Za-z0-9._~+/=-]+/i;
 const UTF8 = new TextDecoder('utf-8', { fatal: true });
 
 function slashPath(path) {
@@ -134,12 +135,32 @@ function validateCheckpoint(segment) {
 
 function preflightObservation(value) {
   const bytes = Buffer.from(JSON.stringify(value), 'utf8');
-  normalizeCensusObservation(value, {
+  return normalizeCensusObservation(value, {
     rawSourceSha256: '0'.repeat(64),
     rawRecordSha256: sha256(bytes),
     rawRecordOffset: 0,
     rawRecordByteLength: bytes.byteLength,
   });
+}
+
+function controllerStableId(normalized) {
+  const field = normalized.fields.providerTrackId;
+  if (field.state !== 'observed') return null;
+  const value = field.value;
+  if (
+    typeof value !== 'string'
+    || value.length < 1
+    || value.length > 512
+    || value.trim() !== value
+    || /[\u0000-\u001f\u007f]/.test(value)
+    || REUSABLE_SECRET_VALUE.test(value)
+    || /^https?:\/\//i.test(value)
+  ) throw new Error('invalid census scroll stable provider ID');
+  return value;
+}
+
+function sameStrings(left, right) {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 function validateSegmentLineage(segment, prior) {
@@ -148,39 +169,75 @@ function validateSegmentLineage(segment, prior) {
   if (checkpoint.round !== segment.round || checkpoint.updatedAt !== segment.observedAt) {
     throw new Error('census scroll segment lineage mismatch');
   }
+  const stableIds = [];
+  let unknownIdObservations = 0;
   for (const observation of segment.observations) {
     if (observation?.observedAt !== segment.observedAt) {
       throw new Error('census scroll observation timestamp does not match its segment');
     }
-    preflightObservation(observation);
+    const stableId = controllerStableId(preflightObservation(observation));
+    if (stableId === null) unknownIdObservations += 1;
+    else stableIds.push(stableId);
   }
 
   if (!prior) {
     if (segment.round !== 1) throw new Error('census scroll rounds must be contiguous from round 1');
-    if (checkpoint.emittedCount !== segment.observations.length) {
-      throw new Error('census scroll emitted-count lineage mismatch');
+  } else {
+    if (prior.status === 'ui_exhausted') throw new Error('terminal census scroll segment must be last');
+    if (segment.runId !== prior.runId || segment.round !== prior.round + 1) {
+      throw new Error('census scroll rounds must have one contiguous run lineage');
     }
-    return checkpoint;
+    if (segment.observedAt < prior.updatedAt) {
+      throw new Error('census scroll timestamps must be monotonic');
+    }
+    if (
+      checkpoint.configuration.stableRoundsRequired !== prior.configuration.stableRoundsRequired
+      || checkpoint.configuration.bottomTolerance !== prior.configuration.bottomTolerance
+    ) throw new Error('census scroll configuration changed within one run');
   }
 
-  if (prior.status === 'ui_exhausted') throw new Error('terminal census scroll segment must be last');
-  if (segment.runId !== prior.runId || segment.round !== prior.round + 1) {
-    throw new Error('census scroll rounds must have one contiguous run lineage');
-  }
-  if (segment.observedAt < prior.updatedAt) {
-    throw new Error('census scroll timestamps must be monotonic');
-  }
-  if (
-    checkpoint.configuration.stableRoundsRequired !== prior.configuration.stableRoundsRequired
-    || checkpoint.configuration.bottomTolerance !== prior.configuration.bottomTolerance
-  ) throw new Error('census scroll configuration changed within one run');
-  if (checkpoint.emittedCount !== prior.emittedCount + segment.observations.length) {
+  const previous = prior ?? {
+    emittedCount: 0,
+    seenStableIds: [],
+    scrollMetrics: { scrollHeight: 0, stableRounds: 0 },
+  };
+  if (checkpoint.emittedCount !== previous.emittedCount + segment.observations.length) {
     throw new Error('census scroll emitted-count lineage mismatch');
   }
-  if (
-    checkpoint.seenStableIds.length < prior.seenStableIds.length
-    || prior.seenStableIds.some((id, index) => checkpoint.seenStableIds[index] !== id)
-  ) throw new Error('census scroll seen stable IDs rewrote prior lineage');
+
+  const expectedSeenStableIds = [...previous.seenStableIds];
+  const seen = new Set(expectedSeenStableIds);
+  let newStableIds = 0;
+  for (const stableId of stableIds) {
+    if (seen.has(stableId)) continue;
+    seen.add(stableId);
+    expectedSeenStableIds.push(stableId);
+    newStableIds += 1;
+  }
+  if (!sameStrings(checkpoint.seenStableIds, expectedSeenStableIds)) {
+    throw new Error('census scroll seen stable IDs do not match controller transition');
+  }
+
+  const computedAtBottom = checkpoint.scrollMetrics.scrollTop + checkpoint.scrollMetrics.viewportHeight
+    >= checkpoint.scrollMetrics.scrollHeight - checkpoint.configuration.bottomTolerance;
+  if (checkpoint.scrollMetrics.atBottom !== computedAtBottom) {
+    throw new Error('census scroll bottom state does not match controller transition');
+  }
+  const heightStable = checkpoint.scrollMetrics.scrollHeight === previous.scrollMetrics.scrollHeight;
+  const stableRound = computedAtBottom
+    && newStableIds === 0
+    && unknownIdObservations === 0
+    && heightStable;
+  const expectedStableRounds = stableRound ? previous.scrollMetrics.stableRounds + 1 : 0;
+  if (checkpoint.scrollMetrics.stableRounds !== expectedStableRounds) {
+    throw new Error('census scroll stable rounds do not match controller transition');
+  }
+  const expectedStatus = expectedStableRounds >= checkpoint.configuration.stableRoundsRequired
+    ? 'ui_exhausted'
+    : 'running';
+  if (checkpoint.status !== expectedStatus) {
+    throw new Error('census scroll status does not match controller transition');
+  }
   return checkpoint;
 }
 
@@ -329,7 +386,6 @@ async function buildObservationPack(segmentRecords, packPath) {
   } finally {
     await handle.close();
   }
-  if (observations === 0) throw new Error('census scroll observation pack is empty');
   return observations;
 }
 
@@ -392,6 +448,7 @@ export async function ingestCensusScrollSegments({
       vaultRoot: resolvedVault,
       checkpointEvery,
       onCheckpoint,
+      allowEmpty: true,
     });
     if (ingestResult.processedRecords !== observationCount) {
       throw new Error('census scroll observation-pack count mismatch');

@@ -78,7 +78,7 @@ Auto-scroll capture first preserves each round byte-for-byte at:
 raw/census-scroll-segments/<segment-sha256>.json
 ```
 
-Each segment binds the ordered raw observations to the exact resume checkpoint returned by that round. Local admission verifies one run ID, unique contiguous rounds from 1, unchanged configuration, monotonic timestamps, cumulative emitted counts, and non-rewritten stable-ID history before building the deterministic NDJSON observation pack. Repeat observations are not removed from raw history.
+Each segment binds the ordered raw observations to the exact resume checkpoint returned by that round. Local admission verifies one run ID, unique contiguous rounds from 1, unchanged configuration, monotonic timestamps, cumulative emitted counts, stable IDs derived only from those observations, computed bottom state, exact stability progression, and an honestly reached terminal state before building the deterministic NDJSON observation pack. Repeat observations are not removed from raw history. A valid terminal run with no rendered objects preserves its exact segments and an empty observation projection; it is not converted into a fabricated object or generic failure.
 
 ## Reproducible normalization
 
@@ -123,7 +123,7 @@ The automated gates prove:
 5. provider creation time, style prompt, lyrics, lyric-generation prompt state, and `observedAt` remain separate;
 6. explicit credential material is refused before raw admission.
 
-The auto-scroll gates additionally prove that an uncheckpointed viewport is replayed, a checkpoint cannot skip over lazy cards by jumping directly to the bottom, every round completes local persistence before the next begins, exact segment bytes survive admission, and broken round lineage fails before run admission.
+The auto-scroll gates additionally prove that an uncheckpointed viewport is replayed, a checkpoint cannot skip over lazy cards by jumping directly to the bottom, observation itself cannot scroll, a separate action is applied only after exact round persistence completes, every rendered node survives before derived stable-ID deduplication, exact segment bytes survive admission, zero-object terminal evidence survives, and forged controller transitions fail before run admission.
 
 ## Auto-scroll source boundary and deferred detail adapter
 

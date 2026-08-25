@@ -98,13 +98,13 @@ function parseRecord(record) {
   }
 }
 
-async function preflightDurableSafety(path) {
+async function preflightDurableSafety(path, { allowEmpty = false } = {}) {
   let records = 0;
   for await (const record of readNdjsonRecords(path)) {
     assertDurableObservationSafe(parseRecord(record));
     records += 1;
   }
-  if (records === 0) throw new Error('raw observation pack is empty');
+  if (records === 0 && !allowEmpty) throw new Error('raw observation pack is empty');
   return records;
 }
 
@@ -277,6 +277,7 @@ export async function ingestCensusPack({
   vaultRoot,
   checkpointEvery = 250,
   onCheckpoint,
+  allowEmpty = false,
 } = {}) {
   const resolvedInput = resolve(String(inputPath ?? ''));
   const resolvedVault = resolve(String(vaultRoot ?? ''));
@@ -285,10 +286,11 @@ export async function ingestCensusPack({
   if (!Number.isSafeInteger(checkpointEvery) || checkpointEvery < 1) {
     throw new Error('checkpointEvery must be a positive integer');
   }
+  if (typeof allowEmpty !== 'boolean') throw new Error('allowEmpty must be boolean');
   await assertRegularFile(resolvedInput, 'census input');
 
   const inputIdentity = await verifyFileStreaming(resolvedInput);
-  await preflightDurableSafety(resolvedInput);
+  await preflightDurableSafety(resolvedInput, { allowEmpty });
   const rawPath = await commitRawSource({
     inputPath: resolvedInput,
     vaultRoot: resolvedVault,

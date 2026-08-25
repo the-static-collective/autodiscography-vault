@@ -38,7 +38,7 @@ test('content script advances one explicit auto-scroll round without network or 
   const observationPhase = between(
     source,
     'function advanceCensusScroll(message)',
-    'chrome.runtime.onMessage.addListener',
+    'function applyCensusScroll(message)',
   );
   assert.equal(/scrollTo\s*\(/.test(observationPhase), false,
     'observing a round must not mutate the UI before its raw segment is durable');
@@ -125,11 +125,10 @@ test('content-script observation is side-effect free until an explicit post-pers
   assert.equal(observed, round);
   assert.deepEqual(scrollCalls, [], 'advance must only observe and propose an action');
 
-  assert.deepEqual(
-    send({ type: 'vault:census-scroll:apply', action: round.action }),
-    { status: 'applied' },
-  );
-  assert.deepEqual(scrollCalls, [{ top: 640, behavior: 'auto' }]);
+  assert.equal(send({ type: 'vault:census-scroll:apply', action: round.action }).status, 'applied');
+  assert.equal(scrollCalls.length, 1);
+  assert.equal(scrollCalls[0].top, 640);
+  assert.equal(scrollCalls[0].behavior, 'auto');
 });
 
 test('side panel exposes operator-started resumable census and persists every round before advancing', async () => {
@@ -157,6 +156,17 @@ test('side panel exposes operator-started resumable census and persists every ro
   const appliedAt = advancePhase.indexOf('await applyCensusScrollAction');
   assert.ok(persistedAt >= 0 && appliedAt > persistedAt,
     'the side panel must durably persist a round before applying its scroll action');
+
+  const downloadWait = between(
+    panel,
+    'async function waitForDownloadCompletion(downloadId)',
+    'async function persistCensusRound(roundResult)',
+  );
+  assert.ok(
+    downloadWait.indexOf('Number.isSafeInteger(downloadId)')
+      < downloadWait.indexOf('chrome.downloads.search'),
+    'a download ID must be validated before it reaches the browser lookup boundary',
+  );
 
   const startPhase = between(panel, 'async function startCensusScroll()', 'function extensionForAsset');
   assert.match(startPhase, /setTimeout\(advanceCensusScroll, 1400\)/,

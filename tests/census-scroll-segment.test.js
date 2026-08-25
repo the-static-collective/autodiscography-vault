@@ -93,7 +93,29 @@ test('segment parsing fails closed on mismatched lineage or extra authority fiel
 });
 
 test('segment durability refuses every credential alias accepted by the controller membrane', () => {
-  for (const key of ['session', 'password', 'passwd', 'secret', 'credential', 'credentials']) {
+  for (const key of [
+    'authorization',
+    'proxyAuthorization',
+    'cookie',
+    'setCookie',
+    'accessToken',
+    'refreshToken',
+    'session',
+    'sessionId',
+    'sessionToken',
+    'password',
+    'passwd',
+    'secret',
+    'credential',
+    'credentials',
+    'apiKey',
+    'authHeader',
+    'authorizationHeader',
+    'authToken',
+    'csrfToken',
+    'idToken',
+    'jwt',
+  ]) {
     const input = roundResult();
     input.observations[0].payload = { providerTrackId: 'track-3', nested: { [key]: 'opaque' } };
     assert.throws(

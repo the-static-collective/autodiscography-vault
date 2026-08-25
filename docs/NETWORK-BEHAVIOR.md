@@ -7,7 +7,7 @@ The permanent Manifest V3 content script remains limited to:
 - `https://suno.com/*`
 - `https://www.suno.com/*`
 
-It reads DOM-visible provider evidence only when the Vault side panel requests a bounded live witness or one explicit census round. Census advances with an ordinary `scrollTo` action smaller than one viewport. The content script does not call `fetch`, `XMLHttpRequest`, `WebSocket`, cookie APIs, request-header interception APIs, browser storage, or `chrome.downloads`.
+It reads DOM-visible provider evidence only when the Vault side panel requests a bounded live witness or one explicit census round. A round-observation message is side-effect free: it returns an ordinary `scrollTo` proposal smaller than one viewport but does not apply it. The content script accepts the separate apply message only after the side panel has durably completed that round. It does not call `fetch`, `XMLHttpRequest`, `WebSocket`, cookie APIs, request-header interception APIs, browser storage, or `chrome.downloads`.
 
 The extension manifest intentionally has:
 
@@ -47,7 +47,7 @@ The side panel asks the content script to observe the currently rendered cards, 
 Autodiscography-Vault/<run-id>/census/round-<round>.json
 ```
 
-The panel waits for that exact download ID to reach `complete` before adopting the returned checkpoint or scheduling another viewport. A failure pauses the run at the last completed segment. The Blob contains only durable-safe observation envelopes and checkpoint state; it contains no provider transport URL or session capability.
+The panel validates that exact download ID and waits for it to reach `complete` before adopting the returned checkpoint. It then sends a separate bounded apply action and schedules the next observation only after the page accepts that action. A stop during persistence prevents the late action. A failure pauses the run at the last completed segment. The Blob contains only durable-safe observation envelopes and checkpoint state; it contains no provider transport URL or session capability.
 
 On resume, the user selects one completed segment. The page restarts from the top so an uncommitted viewport is replayed. The checkpoint's stable-ID set is derived control state; it never deletes repeat observations from the raw round.
 

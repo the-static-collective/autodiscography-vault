@@ -5,13 +5,12 @@ import { promisify } from 'node:util';
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { formatCensusScrollResult } from '../scripts/ingest-census-scroll.js';
 
 const run = promisify(execFile);
 
 function segment(round, { observations = [], stableRounds = 0, status = 'running' } = {}) {
   const observedAt = `2026-08-25T04:00:0${round}.000Z`;
-  const seenStableIds = observations.length ? ['track-cli'] : ['track-cli'];
-  const emittedCount = observations.length ? 1 : 1;
   return {
     schema: 'autodiscography-vault-census-scroll-segment/v1',
     version: 1,
@@ -26,8 +25,8 @@ function segment(round, { observations = [], stableRounds = 0, status = 'running
       runId: 'cli-run',
       configuration: { stableRoundsRequired: 3, bottomTolerance: 1 },
       round,
-      seenStableIds,
-      emittedCount,
+      seenStableIds: ['track-cli'],
+      emittedCount: 1,
       scrollMetrics: {
         scrollTop: 0,
         viewportHeight: 800,
@@ -106,4 +105,17 @@ test('scroll-ingest CLI preserves segments and reports UI exhaustion without a c
 
   const second = await run(process.execPath, args, { cwd: process.cwd() });
   assert.equal(JSON.parse(second.stdout).skippedExisting, true);
+});
+
+test('scroll-ingest result never labels a nonterminal run as a terminal UI witness', () => {
+  const formatted = formatCensusScrollResult({
+    uiExhausted: false,
+    segmentRecords: [],
+    segmentManifestPath: '/vault/receipt.json',
+    segmentManifestSha256: 'a'.repeat(64),
+    rawPath: '/vault/raw.ndjson',
+    rawSourceSha256: 'b'.repeat(64),
+    normalizedPath: '/vault/normalized.ndjson',
+  });
+  assert.equal(formatted.coverageClaim, 'incomplete_ui_traversal');
 });

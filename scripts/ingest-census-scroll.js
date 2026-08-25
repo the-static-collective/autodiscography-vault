@@ -57,7 +57,7 @@ function formatResult(result) {
         status: 'not_built',
       },
     },
-    coverageClaim: 'ui_terminal_only',
+    coverageClaim: result.uiExhausted ? 'ui_terminal_only' : 'incomplete_ui_traversal',
   };
 }
 

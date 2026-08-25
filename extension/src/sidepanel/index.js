@@ -106,6 +106,9 @@ function safeCensusDownloadName(checkpoint) {
 }
 
 async function waitForDownloadCompletion(downloadId) {
+  if (!Number.isSafeInteger(downloadId) || downloadId < 0) {
+    throw new Error('invalid census segment download ID');
+  }
   const terminalState = async () => {
     const [item] = await chrome.downloads.search({ id: downloadId });
     return item?.state ?? null;
@@ -153,6 +156,20 @@ async function persistCensusRound(roundResult) {
   return segment;
 }
 
+async function applyCensusScrollAction(action) {
+  if (
+    censusScrollTabId === null
+    || action?.kind !== 'scroll_to'
+    || !Number.isFinite(action.scrollTop)
+    || action.scrollTop < 0
+  ) throw new Error('invalid census scroll action');
+  const applied = await chrome.tabs.sendMessage(censusScrollTabId, {
+    type: 'vault:census-scroll:apply',
+    action,
+  });
+  if (applied?.status !== 'applied') throw new Error('census scroll action was not applied');
+}
+
 async function advanceCensusScroll() {
   if (!censusScrollActive || censusScrollTabId === null || !censusScrollCheckpoint) return;
   try {
@@ -180,6 +197,9 @@ async function advanceCensusScroll() {
       );
       return;
     }
+    if (!censusScrollActive) return;
+    await applyCensusScrollAction(result.action);
+    if (!censusScrollActive) return;
     censusScrollTimer = setTimeout(advanceCensusScroll, 1400);
   } catch {
     stopCensusScroll(
@@ -241,7 +261,7 @@ async function startCensusScroll() {
     censusScrollStatus.textContent = resumeCheckpoint
       ? `Resuming run ${resumeCheckpoint.runId} from saved round ${resumeCheckpoint.round}; replay starts at the top.`
       : `Started run ${created.checkpoint.runId}; each viewport is saved before the next round.`;
-    await advanceCensusScroll();
+    censusScrollTimer = setTimeout(advanceCensusScroll, 1400);
   } catch {
     stopCensusScroll('Census refused or paused before a new durable round was recorded.');
   }

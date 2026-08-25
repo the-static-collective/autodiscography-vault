@@ -13,9 +13,9 @@ The external preservation deadline recorded by the project is **September 3, 202
 - Manifest V3 Chromium side panel;
 - a permanent read-only content script limited to `https://suno.com/*` and `https://www.suno.com/*`;
 - live DOM witness aggregation by provider identity before the 25-track observation cap;
-- an uncapped census extraction seam that observes every library card currently rendered without changing the bounded 25-track pilot witness;
+- an uncapped census extraction seam that preserves every currently rendered candidate node before any derived stable-ID deduplication, without changing the bounded 25-track pilot witness;
 - a user-started incremental auto-scroll controller with explicit serializable checkpoints and `ui_exhausted` as a UI-only terminal state;
-- one completed immutable local JSON segment, containing raw observations plus its exact resume checkpoint, before each next viewport;
+- a two-phase persist-then-apply handshake: one completed immutable local JSON segment, containing raw observations plus its exact resume checkpoint, before any proposed next-viewport scroll is applied;
 - restart from the last completed segment with stable-ID deduplication confined to checkpoint state and raw re-observations retained;
 - `proposedAssets` kept distinct from actually observed media/link transport surfaces;
 - first-class `audio_wav` proposal/classification for honest `.wav` / WAV MIME surfaces;
@@ -33,7 +33,7 @@ The external preservation deadline recorded by the project is **September 3, 202
 - explicit field evidence for provider creation time, exact style prompt, exact lyrics, original lyric-generation prompt, parent, and WAV availability;
 - typed negative space that keeps `known_null`, `not_observed`, `not_exposed`, `unavailable`, `refused`, `failed_to_fetch`, `artifact_known_bytes_unavailable`, and `historically_observed_now_missing` distinct;
 - checkpointed normalization that safely truncates uncheckpointed derived tail bytes and resumes without duplicating raw history;
-- `census:ingest-scroll`, which validates one contiguous run, preserves each exact segment byte-for-byte, assembles a deterministic non-deduplicated observation pack, and enters the existing resumable normalizer;
+- `census:ingest-scroll`, which validates exact controller transitions, preserves each segment byte-for-byte (including a valid zero-object terminal witness), assembles a deterministic non-deduplicated observation pack, and enters the existing resumable normalizer;
 - explicit verified/incomplete/refusal states and adversarial tests for corruption, torn journals, secret-shaped material, permission creep, and WAV mislabeling.
 
 ## What remains closed

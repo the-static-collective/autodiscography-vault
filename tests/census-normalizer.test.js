@@ -313,15 +313,25 @@ test('historically missing evidence requires exact prior raw-record lineage', ()
 
 test('durable safety refuses credential aliases, bearer values, and signed URL dialects', () => {
   for (const key of [
+    'authorization',
+    'proxyAuthorization',
+    'cookie',
+    'setCookie',
+    'accessToken',
+    'refreshToken',
     'authToken',
     'session',
     'sessionId',
+    'sessionToken',
     'password',
     'passwd',
     'secret',
     'credential',
     'credentials',
+    'apiKey',
+    'authHeader',
     'csrfToken',
+    'idToken',
     'jwt',
     'authorizationHeader',
   ]) {

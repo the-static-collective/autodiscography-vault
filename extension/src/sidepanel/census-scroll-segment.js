@@ -14,12 +14,25 @@ const SEGMENT_KEYS = Object.freeze([
 const FORBIDDEN_KEYS = new Set([
   'authorization',
   'authorizationheader',
+  'accesstoken',
+  'apikey',
+  'authheader',
   'authtoken',
   'cookie',
   'csrftoken',
+  'credential',
+  'credentials',
+  'idtoken',
   'jwt',
+  'passwd',
+  'password',
+  'proxyauthorization',
+  'refreshtoken',
+  'secret',
+  'session',
   'sessionid',
   'sessiontoken',
+  'setcookie',
 ]);
 const SECRET_VALUE = /\bbearer\s+[A-Za-z0-9._~+/=-]+/i;
 
@@ -79,7 +92,14 @@ function deepClone(value) {
   if (value === null || typeof value !== 'object') return value;
   if (Array.isArray(value)) return value.map(deepClone);
   const clone = {};
-  for (const [key, nested] of Object.entries(value)) clone[key] = deepClone(nested);
+  for (const [key, nested] of Object.entries(value)) {
+    Object.defineProperty(clone, key, {
+      value: deepClone(nested),
+      enumerable: true,
+      configurable: false,
+      writable: false,
+    });
+  }
   return clone;
 }
 

@@ -26,7 +26,7 @@ The adapter is technically bounded to the ordinary signed-in DOM, but that does 
 4. Grant the optional Downloads permission so Vault can complete each local JSON round file before advancing.
 5. Keep that Suno tab open until the panel reports `ui_exhausted`, or press **Stop after last saved round** at any time.
 
-The side panel starts from the top and advances by less than one viewport. Each completed file contains that round's raw card observations and the exact checkpoint needed for restart:
+The side panel resets to the top, waits for the rendered DOM to settle, and then advances by less than one viewport. Each round is two-phase: the content script first observes and proposes an action without scrolling; the panel completes the immutable round download; only then may a separate apply message move the page. Each completed file contains that round's raw card observations and the exact checkpoint needed for restart:
 
 ```text
 Downloads/Autodiscography-Vault/<run-id>/census/round-000001.json
@@ -37,6 +37,8 @@ Downloads/Autodiscography-Vault/<run-id>/census/round-000002.json
 If the panel, tab, browser, or machine stops, select the highest completed round file in **Optional completed round file to resume**, then start again. The page replays from the top. Stable IDs suppress duplication only in checkpoint state; replayed card observations remain raw history.
 
 `ui_exhausted` means repeated bottom-of-rendered-UI rounds produced no new or unidentified cards and the scroll height stayed stable. It is a terminal UI witness, not a claim that the provider exposed every historical object or population class.
+
+A legitimately empty rendered library can therefore end with zero card observations. Its stable terminal round sequence remains raw evidence, and admission preserves an empty observation pack plus its segment receipt instead of converting zero into failure or inventing an object.
 
 The library-card adapter preserves stable provider identity and a safe same-origin source path when observed. It deliberately records `providerCreatedAtRaw`, `stylePromptRaw`, `lyricsTextRaw`, `lyricGenerationPromptRaw`, parent identity, and WAV state as typed `not_observed` on this surface. A separate real detail-surface witness is required before any of those fields may become `observed`.
 
@@ -51,7 +53,7 @@ npm run census:ingest-scroll -- \
   --checkpoint-every 250
 ```
 
-The command first validates one contiguous run lineage. It then preserves every exact segment byte-for-byte, creates a deterministic observation pack without deduplicating re-observations, and invokes the resumable Census v1 normalizer. Re-run the same command after interruption.
+The command first validates one contiguous run and replays the controller transition law: stable IDs must derive from that round's observations, bottom state must derive from its metrics, stability must advance exactly, and terminal status cannot be forged. It then preserves every exact segment byte-for-byte, creates a deterministic observation pack without deduplicating re-observations, and invokes the resumable Census v1 normalizer. Re-run the same command after interruption.
 
 The Vault root contains:
 
@@ -64,7 +66,7 @@ receipts/census-v1/<pack-sha256>.json
 receipts/census-scroll-runs/<run-receipt-sha256>.json
 ```
 
-`skippedExisting: true` on a repeat means the command independently verified the existing normalized receipt before skipping. A missing round, duplicate round, changed run ID/configuration, decreasing timestamp, rewritten stable-ID history, unsafe capability, or checkpoint-count mismatch fails closed.
+`skippedExisting: true` on a repeat means the command independently verified the existing normalized receipt before skipping. A missing round, duplicate round, changed run ID/configuration, decreasing timestamp, fabricated stable ID, impossible stability/status transition, unsafe capability, or checkpoint-count mismatch fails closed.
 
 ## Admit another durable-safe observation pack
 

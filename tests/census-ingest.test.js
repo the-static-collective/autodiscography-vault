@@ -282,3 +282,22 @@ test('capability URL hidden in a generic source locator is refused before raw ad
   const rawDir = join(vaultRoot, 'raw', 'observations');
   await assert.rejects(() => readdir(rawDir), error => error?.code === 'ENOENT');
 });
+
+test('an empty generic pack is refused unless a validated witness path explicitly admits it', async () => {
+  const { vaultRoot, inputPath } = await fixture('census-empty');
+  await writeFile(inputPath, Buffer.alloc(0));
+
+  await assert.rejects(
+    () => ingestCensusPack({ inputPath, vaultRoot }),
+    /raw observation pack is empty/,
+  );
+  await assert.rejects(
+    () => readdir(join(vaultRoot, 'raw', 'observations')),
+    error => error?.code === 'ENOENT',
+  );
+
+  const admitted = await ingestCensusPack({ inputPath, vaultRoot, allowEmpty: true });
+  assert.equal(admitted.processedRecords, 0);
+  assert.equal((await readFile(admitted.rawPath)).byteLength, 0);
+  assert.equal((await readFile(admitted.normalizedPath)).byteLength, 0);
+});

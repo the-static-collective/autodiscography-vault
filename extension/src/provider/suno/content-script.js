@@ -55,7 +55,7 @@
       observedAt: message.observedAt,
       candidates: extracted.candidates,
     });
-    const result = censusScroll.advance({
+    return censusScroll.advance({
       checkpoint: message.checkpoint,
       observedAt: message.observedAt,
       candidates,
@@ -65,8 +65,17 @@
         scrollHeight: scroller.scrollHeight,
       },
     });
-    if (result.action.kind === 'scroll_to') scrollTo(scroller, result.action.scrollTop);
-    return result;
+  }
+
+  function applyCensusScroll(message) {
+    const action = message?.action;
+    if (
+      action?.kind !== 'scroll_to'
+      || !Number.isFinite(action.scrollTop)
+      || action.scrollTop < 0
+    ) return refused('invalid_census_scroll_action');
+    scrollTo(scrollingElement(), action.scrollTop);
+    return { status: 'applied' };
   }
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -88,6 +97,10 @@
       }
       if (message?.type === 'vault:census-scroll:advance') {
         sendResponse(advanceCensusScroll(message));
+        return false;
+      }
+      if (message?.type === 'vault:census-scroll:apply') {
+        sendResponse(applyCensusScroll(message));
         return false;
       }
     } catch {

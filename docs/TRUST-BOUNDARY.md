@@ -69,18 +69,18 @@ Each bounded live-pilot observation:
 
 ## Auto-scroll census law
 
-The same Suno-matched content script may perform one user-requested census round at a time. It reads ordinary DOM card evidence and applies an incremental `scrollTo`; it has no network, downloads, cookie, request-header, or browser-storage authority.
+The same Suno-matched content script may perform one user-requested census round at a time. It first reads ordinary DOM card evidence without moving the page. Only after the side panel completes that round's local immutable download may a separate message apply the proposed incremental `scrollTo`. The content script has no network, downloads, cookie, request-header, or browser-storage authority.
 
 Each census run:
 
 - starts or restarts at the top of the current library surface;
-- observes every currently rendered grouped card rather than applying the 25-track pilot cap;
+- observes every currently rendered candidate node rather than grouping raw census evidence or applying the 25-track pilot cap;
 - emits one immutable raw observation per rendered card, including repeated observations across rounds;
 - uses only an actually observed stable provider ID for derived checkpoint deduplication;
 - keeps unknown identities separate and prevents them from contributing to an exhaustion claim;
 - moves by less than one viewport so lazy-rendered cards are not intentionally jumped over;
 - saves raw observations and the exact next checkpoint together in one local JSON segment;
-- waits for that segment download to complete before adopting its checkpoint or advancing again;
+- waits for that segment download to complete before adopting its checkpoint, applying its action, or advancing again;
 - reaches `ui_exhausted` only after repeated bottom rounds have no new IDs, no unknown IDs, and stable scroll height;
 - never relabels `ui_exhausted` as provider completeness.
 
@@ -159,7 +159,7 @@ local exact scroll segments or observation pack
   -> derived interpretation                         not built
 ```
 
-Each scroll segment and raw pack is copied byte-for-byte and addressed by its SHA-256. Segment lineage must be one run with unique contiguous rounds, monotonic timestamps, cumulative stable-ID history, and exact emitted counts. A changed provider observation receives a different address; prior raw evidence is never updated in place. Re-observations remain in the pack even when their stable IDs already exist in derived checkpoint state.
+Each scroll segment and raw pack is copied byte-for-byte and addressed by its SHA-256. Admission replays the checkpoint-controller law across one run: unique contiguous rounds, monotonic timestamps, exact emitted counts, stable IDs derived only from raw observations, computed bottom state, exact stability increments, and an honestly reached terminal state. A changed provider observation receives a different address; prior raw evidence is never updated in place. Re-observations remain in the pack even when their stable IDs already exist in derived checkpoint state. A validated terminal run may preserve zero observations as an empty-population witness; generic empty packs remain refused by default.
 
 Each observation supplies explicit field evidence. An observed value points into its own raw payload with a JSON pointer. A missing value supplies a typed absence and reason code. Normalization may dereference or deterministically parse that evidence; it may not guess provider field names, substitute `observedAt` for provider creation time, infer a lyric-generation prompt from lyrics, infer a root ancestor from a missing parent, or carry an earlier value forward into a later absence.
 

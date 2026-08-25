@@ -178,7 +178,7 @@ test('aggregation happens before the 25-track cap', () => {
   assert.equal(extracted.candidates[0].title, 'Track One Enriched');
 });
 
-test('census extraction preserves every currently rendered grouped candidate before auto-scroll', () => {
+test('census extraction preserves every currently rendered candidate before auto-scroll', () => {
   const observer = loadObserver();
   const nodes = Array.from({ length: 40 }, (_, index) => element({
     tagName: 'A',

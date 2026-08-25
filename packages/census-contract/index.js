@@ -32,6 +32,12 @@ const FORBIDDEN_DURABLE_KEYS = new Set([
   'accesstoken',
   'refreshtoken',
   'sessiontoken',
+  'session',
+  'password',
+  'passwd',
+  'secret',
+  'credential',
+  'credentials',
   'apikey',
   'authheader',
   'authorizationheader',
@@ -227,6 +233,7 @@ function normalizeExplicitOffsetTimestamp(value) {
 
   let offsetMinutes = 0;
   if (offsetRaw !== 'Z') {
+    if (offsetRaw === '-00:00') return null;
     const offsetHours = Number(offsetRaw.slice(1, 3));
     const offsetRemainder = Number(offsetRaw.slice(4, 6));
     if (offsetHours > 14 || offsetRemainder > 59 || (offsetHours === 14 && offsetRemainder !== 0)) return null;

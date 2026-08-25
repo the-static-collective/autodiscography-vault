@@ -443,7 +443,12 @@
   }
 
   function extractSunoCensusCandidates(documentLike) {
-    return extractGroupedSunoCandidates(documentLike);
+    if (!documentLike?.querySelectorAll) return { candidateNodeCount: 0, candidates: [] };
+    const nodes = Array.from(documentLike.querySelectorAll(CANDIDATE_SELECTORS.join(',')));
+    return {
+      candidateNodeCount: nodes.length,
+      candidates: nodes.map((node, index) => candidateFromNode(node, index)),
+    };
   }
 
   globalThis.AutodiscographyVaultSuno = Object.freeze({
