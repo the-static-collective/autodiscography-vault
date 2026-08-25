@@ -98,7 +98,7 @@ export function assertDurableObservationSafe(value, seen = new Set()) {
     if (FORBIDDEN_DURABLE_KEYS.has(normalizedKey)) {
       throw new Error(`durable credential field refused: ${key}`);
     }
-    if (/(?:url|uri|href)$/.test(normalizedKey) && isCapabilityUrl(nested)) {
+    if (isCapabilityUrl(nested)) {
       throw new Error(`durable capability URL refused: ${key}`);
     }
     assertDurableObservationSafe(nested, seen);

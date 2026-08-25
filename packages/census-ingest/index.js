@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import {
   copyFile,
+  chmod,
   link,
   mkdir,
   open,
@@ -126,6 +127,7 @@ async function commitRawSource({ inputPath, vaultRoot, identity }) {
   const partialPath = join(rawDir, `.${identity.sha256}.${process.pid}.${suffix}.partial`);
   await copyFile(inputPath, partialPath);
   try {
+    await chmod(partialPath, 0o600);
     const copied = await verifyFileStreaming(partialPath);
     if (copied.byteLength !== identity.byteLength || copied.sha256 !== identity.sha256) {
       throw new Error('raw observation changed during admission');
