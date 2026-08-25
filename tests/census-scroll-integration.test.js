@@ -158,6 +158,22 @@ test('content-script observation is side-effect free until an explicit post-pers
     checkpoint: { runId: 'runtime-handshake', round: 0 },
     observedAt: round.observedAt,
   });
+  scroller.clientHeight = 700;
+  const resized = send({
+    type: 'vault:census-scroll:apply',
+    runId: round.runId,
+    round: round.round,
+    action: round.action,
+  });
+  assert.equal(resized.status, 'refused', 'viewport drift invalidates an observed pending action');
+  assert.equal(scrollCalls.length, 1);
+
+  scroller.clientHeight = 800;
+  send({
+    type: 'vault:census-scroll:advance',
+    checkpoint: { runId: 'runtime-handshake', round: 0 },
+    observedAt: round.observedAt,
+  });
   context.location.href = 'https://suno.com/create';
   const navigated = send({
     type: 'vault:census-scroll:apply',
