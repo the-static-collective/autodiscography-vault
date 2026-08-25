@@ -103,7 +103,7 @@ test('user-triggered WAV may omit a nonexistent request descriptor and still adm
   assert.equal(result.receipt.sourceRelativePath, 'assets/track-wav/audio_wav.wav');
 
   const handoff = JSON.parse(await readFile(join(vaultRoot, 'receipts', 'handoff.json'), 'utf8'));
-  assert.equal(handoff.records[0].requestDescriptorSha256, null);
+  assert.equal(Object.hasOwn(handoff.records[0], 'requestDescriptorSha256'), false);
 });
 
 test('fake .wav bytes are refused before a verified journal can be created', async () => {
