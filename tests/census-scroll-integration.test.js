@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import vm from 'node:vm';
 
 async function text(path) {
   return readFile(new URL(path, import.meta.url), 'utf8');
@@ -53,6 +54,82 @@ test('content script advances one explicit auto-scroll round without network or 
   ]) {
     assert.equal(forbidden.test(source), false, `content script must not contain ${forbidden}`);
   }
+});
+
+test('content-script observation is side-effect free until an explicit post-persistence apply', async () => {
+  const source = await text('../extension/src/provider/suno/content-script.js');
+  const scrollCalls = [];
+  let listener = null;
+  const round = {
+    schema: 'autodiscography-vault-census-scroll-round/v1',
+    version: 1,
+    runId: 'runtime-handshake',
+    round: 1,
+    observedAt: '2026-08-25T04:00:01.000Z',
+    status: 'running',
+    observations: [],
+    action: { kind: 'scroll_to', scrollTop: 640 },
+    checkpoint: { runId: 'runtime-handshake', round: 1 },
+  };
+  const scroller = {
+    scrollTop: 0,
+    clientHeight: 800,
+    scrollHeight: 4800,
+    scrollTo(action) {
+      scrollCalls.push(action);
+    },
+  };
+  const context = {
+    URL,
+    location: { origin: 'https://suno.com' },
+    document: { scrollingElement: scroller, documentElement: scroller },
+    chrome: {
+      runtime: {
+        onMessage: {
+          addListener(value) {
+            listener = value;
+          },
+        },
+      },
+    },
+    AutodiscographyVaultSuno: {
+      extractSunoCensusCandidates() {
+        return { candidates: [], candidateNodeCount: 0 };
+      },
+    },
+    AutodiscographyVaultSunoCensusCardObserver: {
+      buildCardCandidates() {
+        return [];
+      },
+    },
+    AutodiscographyVaultSunoCensusScroll: {
+      advance() {
+        return round;
+      },
+    },
+  };
+  context.globalThis = context;
+  vm.runInNewContext(source, context, { filename: 'content-script.js' });
+  assert.equal(typeof listener, 'function');
+
+  const send = message => {
+    let response;
+    listener(message, {}, value => { response = value; });
+    return response;
+  };
+  const observed = send({
+    type: 'vault:census-scroll:advance',
+    checkpoint: { runId: 'runtime-handshake', round: 0 },
+    observedAt: round.observedAt,
+  });
+  assert.equal(observed, round);
+  assert.deepEqual(scrollCalls, [], 'advance must only observe and propose an action');
+
+  assert.deepEqual(
+    send({ type: 'vault:census-scroll:apply', action: round.action }),
+    { status: 'applied' },
+  );
+  assert.deepEqual(scrollCalls, [{ top: 640, behavior: 'auto' }]);
 });
 
 test('side panel exposes operator-started resumable census and persists every round before advancing', async () => {
