@@ -73,8 +73,8 @@ The same Suno-matched content script may perform one user-requested census round
 
 Each census run:
 
-- starts or restarts at the top of the current library surface;
-- requires repeated stable render/scroll probes at the reset top and after every applied action, with a bounded pause-on-timeout;
+- starts or restarts at the top of the current library surface and binds the run to that route and content-script document instance;
+- requires the same in-memory route/document binding plus repeated stable render/scroll probes at the reset top and after every applied action, with a bounded pause on mismatch or timeout;
 - observes every currently rendered candidate node rather than grouping raw census evidence or applying the 25-track pilot cap;
 - emits one immutable raw observation per rendered card, including repeated observations across rounds;
 - uses only an actually observed stable provider ID for derived checkpoint deduplication;

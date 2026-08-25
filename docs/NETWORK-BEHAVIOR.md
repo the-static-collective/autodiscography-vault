@@ -41,13 +41,13 @@ The extension does not require permission-gated Downloads APIs before that grant
 
 ### Auto-scroll round path
 
-The side panel asks the content script to observe the currently rendered cards, advances the pure checkpoint controller, and creates a local `application/json` Blob. It downloads that Blob under:
+The side panel asks the content script to bind the run to the current safe route identity and a random per-document nonce, observe the currently rendered cards, advance the pure checkpoint controller, and create a local `application/json` Blob. The binding stays in memory; every probe, observation, and apply must match it, so navigation or reload pauses rather than mixing surfaces. It downloads the Blob under:
 
 ```text
 Autodiscography-Vault/<run-id>/census/round-<round>.json
 ```
 
-The panel validates that exact download ID and waits for it to reach `complete` before adopting the returned checkpoint. It then sends the bound apply action and polls only safe scroll metrics, card count, and a bounded rendered fingerprint until the expected viewport is stable across repeated probes. The reset-to-top path uses the same bounded acknowledgement. Probe data is control state, not raw evidence. A timeout pauses the run. Every Start/Stop owns a generation token; stale permission, tab, download, apply, or settle continuations exit before mutating a replacement run. The Blob contains only durable-safe observation envelopes and checkpoint state; it contains no provider transport URL or session capability.
+The panel validates that exact download ID and waits for it to reach `complete` before adopting the returned checkpoint. It then sends the bound apply action and polls only the matching route/document binding, safe scroll metrics, card count, and a bounded rendered fingerprint until the expected viewport is stable across repeated probes. The reset-to-top path uses the same bounded acknowledgement. Binding and probe data are control state, not raw evidence. A mismatch or timeout pauses the run. Every Start/Stop owns a generation token; stale permission, tab, download, apply, or settle continuations exit before mutating a replacement run. The Blob contains only durable-safe observation envelopes and checkpoint state; it contains no route/document binding, provider transport URL, or session capability.
 
 On resume, the user selects one completed segment. The page restarts from the top so an uncommitted viewport is replayed. The checkpoint's stable-ID set is derived control state; it never deletes repeat observations from the raw round.
 

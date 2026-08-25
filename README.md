@@ -16,7 +16,7 @@ The external preservation deadline recorded by the project is **September 3, 202
 - an uncapped census extraction seam that preserves every currently rendered candidate node before any derived stable-ID deduplication, without changing the bounded 25-track pilot witness;
 - a user-started incremental auto-scroll controller with explicit serializable checkpoints and `ui_exhausted` as a UI-only terminal state;
 - a two-phase persist-then-apply handshake: one completed immutable local JSON segment before a one-shot scroll bound to the unchanged observed run, round, page, scroller, render fingerprint, and viewport;
-- generation-owned Start/Stop continuations plus bounded repeated settle probes at reset and after every scroll, preventing stale-run bleed and fixed-delay card skipping;
+- generation-owned Start/Stop continuations plus a run-wide route/document binding and bounded repeated settle probes at reset and after every scroll, preventing stale-run bleed, cross-surface migration, and fixed-delay card skipping;
 - restart from the last completed segment with stable-ID deduplication confined to checkpoint state and raw re-observations retained;
 - `proposedAssets` kept distinct from actually observed media/link transport surfaces;
 - first-class `audio_wav` proposal/classification for honest `.wav` / WAV MIME surfaces;
