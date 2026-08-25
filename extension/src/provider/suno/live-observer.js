@@ -3,7 +3,7 @@
 
   const MAX_TRACKS = 25;
   const ALLOWED_ORIGINS = new Set(['https://suno.com', 'https://www.suno.com']);
-  const PROPOSED_ASSETS = Object.freeze(['raw_metadata', 'lyrics', 'artwork', 'audio_mp3']);
+  const PROPOSED_ASSETS = Object.freeze(['raw_metadata', 'lyrics', 'artwork', 'audio_mp3', 'audio_wav']);
   const SECRET_KEY = /(authorization|cookie|token|session|password|passwd|secret|credential|api[_-]?key)/i;
   const SECRET_VALUE = /(\bbearer\s+[A-Za-z0-9._~+/=-]+|[?&](?:token|session|auth|authorization|key)=[^&\s]+)/i;
   const CANDIDATE_SELECTORS = Object.freeze([
@@ -14,6 +14,7 @@
   ]);
   const IMAGE_PATH = /\.(?:avif|gif|jpe?g|png|webp)$/i;
   const MP3_PATH = /\.mp3$/i;
+  const WAV_PATH = /\.wav$/i;
   const SHA256_K = Object.freeze([
     0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
     0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
@@ -41,8 +42,6 @@
 
     for (const [key, nested] of Object.entries(value)) {
       if (SECRET_KEY.test(key)) return true;
-      // Phase B2 permits an exact observed transport URL only in ephemeral memory.
-      // It is never copied into requestPreview, durable receipts, manifests, or storage.
       if (key === 'transportUrl') continue;
       if (containsSecretShape(nested, seen)) return true;
     }
@@ -199,18 +198,14 @@
       transportUrl,
       requestPreview,
       requestDescriptorSha256: sha256Hex(requestPreview),
-      evidence: Object.freeze({
-        selectorHint: boundedString(asset?.evidence?.selectorHint, 160),
-      }),
+      evidence: Object.freeze({ selectorHint: boundedString(asset?.evidence?.selectorHint, 160) }),
     });
   }
 
   function normalizeTrack(candidate, origin) {
     const providerTrackId = boundedString(candidate?.providerTrackId, 256);
     const observedAssets = Array.isArray(candidate?.observedAssets)
-      ? candidate.observedAssets
-        .map(asset => normalizeObservedAsset(asset, providerTrackId))
-        .filter(Boolean)
+      ? candidate.observedAssets.map(asset => normalizeObservedAsset(asset, providerTrackId)).filter(Boolean)
       : [];
     return Object.freeze({
       providerTrackId,
@@ -239,25 +234,16 @@
   }
 
   function buildLiveObservation({ origin, candidates = [], candidateNodeCount, observedAt } = {}) {
-    if (!ALLOWED_ORIGINS.has(origin)) {
-      return refused(origin, observedAt, 'wrong_origin');
-    }
-
-    if (containsSecretShape(candidates)) {
-      return refused(origin, observedAt, 'reusable_auth_required');
-    }
+    if (!ALLOWED_ORIGINS.has(origin)) return refused(origin, observedAt, 'wrong_origin');
+    if (containsSecretShape(candidates)) return refused(origin, observedAt, 'reusable_auth_required');
 
     const input = Array.isArray(candidates) ? candidates : [];
     const nodeCount = Number.isInteger(candidateNodeCount) ? candidateNodeCount : input.length;
-    if (nodeCount === 0) {
-      return refused(origin, observedAt, 'no_tracks_observed');
-    }
+    if (nodeCount === 0) return refused(origin, observedAt, 'no_tracks_observed');
 
     const normalized = input.map(candidate => normalizeTrack(candidate, origin));
     const supported = normalized.filter(track => track.providerTrackId || track.title || track.sourceUrl);
-    if (supported.length === 0) {
-      return refused(origin, observedAt, 'unsupported_page_shape');
-    }
+    if (supported.length === 0) return refused(origin, observedAt, 'unsupported_page_shape');
 
     const truncated = nodeCount > MAX_TRACKS || supported.length > MAX_TRACKS;
     return Object.freeze({
@@ -321,8 +307,13 @@
       assetRole = 'artwork';
       surface = 'image';
     } else if (tagName === 'AUDIO' || tagName === 'SOURCE') {
-      assetRole = type === 'audio/mpeg' || MP3_PATH.test(pathname) ? 'audio_mp3' : 'other';
+      if (type === 'audio/wav' || WAV_PATH.test(pathname)) assetRole = 'audio_wav';
+      else if (type === 'audio/mpeg' || MP3_PATH.test(pathname)) assetRole = 'audio_mp3';
+      else assetRole = 'other';
       surface = tagName === 'AUDIO' ? 'audio' : 'source';
+    } else if (tagName === 'A' && WAV_PATH.test(pathname)) {
+      assetRole = 'audio_wav';
+      surface = 'link';
     } else if (tagName === 'A' && MP3_PATH.test(pathname)) {
       assetRole = 'audio_mp3';
       surface = 'link';
@@ -339,21 +330,15 @@
       transportUrl,
       requestPreview,
       requestDescriptorSha256: sha256Hex(requestPreview),
-      evidence: {
-        selectorHint: `asset-${index + 1}`,
-      },
+      evidence: { selectorHint: `asset-${index + 1}` },
     };
   }
 
   function observedAssetsFromNode(node, providerTrackId) {
     const nodes = [];
-    if (['AUDIO', 'SOURCE', 'IMG'].includes(boundedString(node?.tagName, 16)?.toUpperCase()) || node?.matches?.('a[href]')) {
-      nodes.push(node);
-    }
+    if (['AUDIO', 'SOURCE', 'IMG'].includes(boundedString(node?.tagName, 16)?.toUpperCase()) || node?.matches?.('a[href]')) nodes.push(node);
     try {
-      if (node?.querySelectorAll) {
-        nodes.push(...Array.from(node.querySelectorAll('audio[src], source[src], img[src], a[href]')));
-      }
+      if (node?.querySelectorAll) nodes.push(...Array.from(node.querySelectorAll('audio[src], source[src], img[src], a[href]')));
     } catch {
       // Unsupported nested shape contributes no transport witness.
     }
@@ -386,10 +371,7 @@
       title,
       sourceUrl,
       observedAssets: observedAssetsFromNode(node, providerTrackId),
-      evidence: {
-        source: 'dom',
-        selectorHint: `candidate-${index + 1}`,
-      },
+      evidence: { source: 'dom', selectorHint: `candidate-${index + 1}` },
     };
   }
 
@@ -434,9 +416,7 @@
   }
 
   function extractSunoCandidates(documentLike) {
-    if (!documentLike?.querySelectorAll) {
-      return { candidateNodeCount: 0, candidates: [] };
-    }
+    if (!documentLike?.querySelectorAll) return { candidateNodeCount: 0, candidates: [] };
 
     const nodes = Array.from(documentLike.querySelectorAll(CANDIDATE_SELECTORS.join(',')));
     const grouped = new Map();
@@ -445,24 +425,14 @@
       const candidate = candidateFromNode(nodes[index], index);
       const key = candidateGroupKey(candidate, index);
       if (!grouped.has(key)) {
-        grouped.set(key, {
-          ...candidate,
-          observedAssets: [...(candidate.observedAssets ?? [])],
-        });
+        grouped.set(key, { ...candidate, observedAssets: [...(candidate.observedAssets ?? [])] });
       } else {
         mergeCandidate(grouped.get(key), candidate);
       }
     }
 
-    return {
-      candidateNodeCount: nodes.length,
-      candidates: Array.from(grouped.values()).slice(0, MAX_TRACKS),
-    };
+    return { candidateNodeCount: nodes.length, candidates: Array.from(grouped.values()).slice(0, MAX_TRACKS) };
   }
 
-  globalThis.AutodiscographyVaultSuno = Object.freeze({
-    MAX_TRACKS,
-    buildLiveObservation,
-    extractSunoCandidates,
-  });
+  globalThis.AutodiscographyVaultSuno = Object.freeze({ MAX_TRACKS, buildLiveObservation, extractSunoCandidates });
 })();

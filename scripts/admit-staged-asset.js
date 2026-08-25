@@ -5,6 +5,7 @@ import { ASSET_ROLES, makeAcquisitionKey, validateReceipt } from '../packages/ac
 import { appendJournalEntry, latestReceiptForKey, readJournal } from '../packages/journal/index.js';
 import { buildHandoffManifest } from '../packages/manifest/index.js';
 import { assertMatchesReceipt, verifyFile } from '../packages/verifier/index.js';
+import { assertWavContainer } from '../packages/wav/index.js';
 
 const SHA256_HEX = /^[a-f0-9]{64}$/;
 const SECRET_VALUE = /(?:\bBearer\s+[A-Za-z0-9._~+/=-]+|\b(?:authorization|cookie|session|token|password|secret)\s*[:=])/i;
@@ -50,9 +51,11 @@ function validateInputs(options) {
   const providerTrackId = requireString(options?.providerTrackId, 'providerTrackId');
   const assetRole = requireString(options?.assetRole, 'assetRole');
   const observedAt = requireString(options?.observedAt, 'observedAt');
-  const requestDescriptorSha256 = requireString(options?.requestDescriptorSha256, 'requestDescriptorSha256');
+  const requestDescriptorSha256 = options?.requestDescriptorSha256 === undefined
+    ? undefined
+    : requireString(options.requestDescriptorSha256, 'requestDescriptorSha256');
 
-  if (!SHA256_HEX.test(requestDescriptorSha256)) {
+  if (requestDescriptorSha256 !== undefined && !SHA256_HEX.test(requestDescriptorSha256)) {
     throw new Error('requestDescriptorSha256 must be lowercase SHA-256');
   }
   if (!ASSET_ROLES.includes(assetRole)) throw new Error('invalid assetRole');
@@ -69,7 +72,7 @@ function validateInputs(options) {
     observedAt,
     byteLength: 0,
     sha256: '0'.repeat(64),
-    requestDescriptorSha256,
+    ...(requestDescriptorSha256 === undefined ? {} : { requestDescriptorSha256 }),
   });
 
   return Object.freeze({
@@ -99,6 +102,7 @@ async function writeHandoff({ vaultRoot, runId, journalEntries }) {
 export async function admitStagedAsset(options) {
   const input = validateInputs(options);
   await assertStagedFile(input.stagedFile);
+  if (input.assetRole === 'audio_wav') await assertWavContainer(input.stagedFile);
 
   const safeTrackId = safePathSegment(input.providerTrackId, 'unknown-track');
   const safeRole = safePathSegment(input.assetRole, 'other');
@@ -159,7 +163,9 @@ export async function admitStagedAsset(options) {
     sourceRelativePath,
     byteLength: finalIdentity.byteLength,
     sha256: finalIdentity.sha256,
-    requestDescriptorSha256: input.requestDescriptorSha256,
+    ...(input.requestDescriptorSha256 === undefined
+      ? {}
+      : { requestDescriptorSha256: input.requestDescriptorSha256 }),
   });
 
   await appendJournalEntry(journalPath, receipt);

@@ -48,12 +48,21 @@ article h3 {
   margin-top: 0;
 }
 
-button {
+button,
+input {
+  box-sizing: border-box;
   width: 100%;
   padding: 0.65rem;
 }
 
-button + p {
+label {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-weight: 700;
+}
+
+button + p,
+input + p {
   margin-top: 0.75rem;
 }
 
@@ -65,6 +74,16 @@ button[disabled] {
 #transport-status {
   font-variant-numeric: tabular-nums;
   font-weight: 700;
+}
+
+#admit-command {
+  max-height: 12rem;
+  overflow: auto;
+  padding: 0.65rem;
+  border: 1px solid currentColor;
+  border-radius: 0.35rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .observed-asset p {

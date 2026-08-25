@@ -52,3 +52,23 @@ test('handoff preserves explicit incomplete state rather than inventing bytes', 
   assert.equal(manifest.records[0].reasonCode, 'not_available');
   assert.equal(manifest.records[0].requestDescriptorSha256, null);
 });
+
+test('handoff omits absent request descriptor for a browser-download WAV witness', () => {
+  const manifest = buildHandoffManifest({
+    runId: 'r1',
+    receipts: [{
+      schemaVersion: 1,
+      runId: 'r1',
+      provider: 'suno',
+      providerTrackId: 't-wav',
+      assetRole: 'audio_wav',
+      state: 'verified',
+      observedAt: '2026-08-25T03:03:33.156Z',
+      sourceRelativePath: 'assets/t-wav/audio_wav.wav',
+      byteLength: 24944812,
+      sha256: 'd'.repeat(64),
+    }],
+  });
+
+  assert.equal(Object.hasOwn(manifest.records[0], 'requestDescriptorSha256'), false);
+});
