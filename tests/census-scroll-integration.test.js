@@ -81,7 +81,7 @@ test('content-script observation is side-effect free until an explicit post-pers
   };
   const context = {
     URL,
-    location: { origin: 'https://suno.com' },
+    location: { origin: 'https://suno.com', href: 'https://suno.com/library' },
     document: { scrollingElement: scroller, documentElement: scroller },
     chrome: {
       runtime: {
@@ -117,6 +117,15 @@ test('content-script observation is side-effect free until an explicit post-pers
     listener(message, {}, value => { response = value; });
     return response;
   };
+  const freshApply = send({
+    type: 'vault:census-scroll:apply',
+    runId: round.runId,
+    round: round.round,
+    action: round.action,
+  });
+  assert.equal(freshApply.status, 'refused', 'a fresh document has no observed action to apply');
+  assert.deepEqual(scrollCalls, []);
+
   const observed = send({
     type: 'vault:census-scroll:advance',
     checkpoint: { runId: 'runtime-handshake', round: 0 },
@@ -125,10 +134,39 @@ test('content-script observation is side-effect free until an explicit post-pers
   assert.equal(observed, round);
   assert.deepEqual(scrollCalls, [], 'advance must only observe and propose an action');
 
-  assert.equal(send({ type: 'vault:census-scroll:apply', action: round.action }).status, 'applied');
+  const mismatched = send({
+    type: 'vault:census-scroll:apply',
+    runId: round.runId,
+    round: round.round + 1,
+    action: round.action,
+  });
+  assert.equal(mismatched.status, 'refused');
+  assert.deepEqual(scrollCalls, [], 'a mismatched run/round cannot consume the pending action');
+
+  assert.equal(send({
+    type: 'vault:census-scroll:apply',
+    runId: round.runId,
+    round: round.round,
+    action: round.action,
+  }).status, 'applied');
   assert.equal(scrollCalls.length, 1);
   assert.equal(scrollCalls[0].top, 640);
   assert.equal(scrollCalls[0].behavior, 'auto');
+
+  send({
+    type: 'vault:census-scroll:advance',
+    checkpoint: { runId: 'runtime-handshake', round: 0 },
+    observedAt: round.observedAt,
+  });
+  context.location.href = 'https://suno.com/create';
+  const navigated = send({
+    type: 'vault:census-scroll:apply',
+    runId: round.runId,
+    round: round.round,
+    action: round.action,
+  });
+  assert.equal(navigated.status, 'refused', 'navigation invalidates an observed pending action');
+  assert.equal(scrollCalls.length, 1, 'a stale action cannot move a different Suno surface');
 });
 
 test('side panel exposes operator-started resumable census and persists every round before advancing', async () => {
@@ -156,6 +194,10 @@ test('side panel exposes operator-started resumable census and persists every ro
   const appliedAt = advancePhase.indexOf('await applyCensusScrollAction');
   assert.ok(persistedAt >= 0 && appliedAt > persistedAt,
     'the side panel must durably persist a round before applying its scroll action');
+  const settledAt = advancePhase.indexOf('await waitForCensusScrollSettled', appliedAt);
+  const scheduledAt = advancePhase.indexOf('setTimeout(advanceCensusScroll', settledAt);
+  assert.ok(settledAt > appliedAt && scheduledAt > settledAt,
+    'the next round must wait for acknowledged rendered-state stability after scrolling');
 
   const downloadWait = between(
     panel,
@@ -169,9 +211,50 @@ test('side panel exposes operator-started resumable census and persists every ro
   );
 
   const startPhase = between(panel, 'async function startCensusScroll()', 'function extensionForAsset');
-  assert.match(startPhase, /setTimeout\(advanceCensusScroll, 1400\)/,
-    'the first observation must wait for the reset-to-top DOM to settle');
+  const resetSettledAt = startPhase.indexOf('await waitForCensusScrollSettled');
+  const firstScheduledAt = startPhase.indexOf('setTimeout(advanceCensusScroll', resetSettledAt);
+  assert.ok(resetSettledAt >= 0 && firstScheduledAt > resetSettledAt,
+    'the first observation must wait for acknowledged reset-to-top DOM stability');
   assert.equal(startPhase.includes('await advanceCensusScroll()'), false);
+  const settlePhase = between(
+    panel,
+    'async function waitForCensusScrollSettled',
+    'async function advanceCensusScroll()',
+  );
+  assert.match(settlePhase, /stableProbes/);
+  assert.match(settlePhase, /maxWaitMs/);
+  assert.match(settlePhase, /requiredTop/);
+  assert.match(settlePhase, /vault:census-scroll:probe/);
   assert.equal(/chrome\.storage|localStorage|sessionStorage/.test(panel), false);
   assert.equal(/provider_complete/.test(`${html}\n${panel}`), false);
+});
+
+test('side panel invalidates stale async rounds before a Stop-to-Start replacement can apply them', async () => {
+  const panel = await text('../extension/src/sidepanel/index.js');
+  assert.match(panel, /let censusScrollGeneration = 0/);
+
+  const stopPhase = between(panel, 'function stopCensusScroll(status)', 'function safeCensusDownloadName');
+  assert.match(stopPhase, /censusScrollGeneration \+= 1/,
+    'stopping or replacing a run must invalidate every in-flight async continuation');
+
+  const advancePhase = between(
+    panel,
+    'async function advanceCensusScroll()',
+    'async function startCensusScroll()',
+  );
+  const capturedAt = advancePhase.indexOf('const generation = censusScrollGeneration');
+  const persistedAt = advancePhase.indexOf('await persistCensusRound');
+  const guardedAt = advancePhase.indexOf('if (!isCurrentCensusScroll(generation)) return', persistedAt);
+  const appliedAt = advancePhase.indexOf('await applyCensusScrollAction');
+  assert.ok(capturedAt >= 0 && persistedAt > capturedAt && guardedAt > persistedAt && appliedAt > guardedAt,
+    'a stale durable completion must exit before overwriting or applying into a replacement run');
+
+  const startPhase = between(panel, 'async function startCensusScroll()', 'function extensionForAsset');
+  const activeAt = startPhase.indexOf('setCensusScrollActive(true)');
+  const firstAwaitAt = startPhase.indexOf('await ');
+  assert.ok(activeAt >= 0 && activeAt < firstAwaitAt,
+    'Start must disable duplicate starts before its first asynchronous boundary');
+  assert.match(startPhase, /const generation = censusScrollGeneration/);
+  assert.ok((startPhase.match(/isCurrentCensusScroll\(generation\)/g) ?? []).length >= 3,
+    'permission, tab lookup, and create continuations must all refuse stale starts');
 });
