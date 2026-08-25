@@ -86,6 +86,8 @@ Each census run:
 
 The library-card surface is not an exact-detail witness. Provider creation time, style prompt, lyrics text, lyric-generation prompt, parent identity, and WAV state remain typed `not_observed` with a surface-specific reason. Titles and ephemeral media URLs seen by the older bounded pilot are not promoted into those exact raw fields.
 
+Run/round/candidate locators preserve observed order. They do not attest which provider sort order was active, prove oldest/newest boundaries, or constitute a bidirectional chronological census cut. Those require separate visible evidence and reconciliation; provider dates may corroborate a witnessed traversal later but may not manufacture completeness.
+
 ## Two transport evidence laws
 
 ### Honest DOM transport

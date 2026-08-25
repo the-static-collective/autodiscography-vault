@@ -101,4 +101,6 @@ Do not weaken the membrane to make an unsafe source pass. Convert capability-bea
 
 ## Remaining witness gate
 
-The one-real-WAV prerequisite passed. The auto-scroll implementation and local segment admission are automated candidates, not yet a real-library population witness. Before treating a run as the observed library population, record a real signed-in specimen that proves the current Suno library DOM yields stable identities across incremental scrolling and honestly reaches `ui_exhausted`. Exact creation time, style prompt, lyrics, lyric-generation prompt, and historical lineage remain a separate detail-surface witness.
+The one-real-WAV prerequisite passed. The auto-scroll implementation and local segment admission are automated candidates, not yet a real-library population witness. Before treating a run as the observed library population, record a real signed-in specimen that proves the current Suno library DOM yields stable identities across incremental scrolling and honestly reaches `ui_exhausted`.
+
+Current segments preserve run, round, and candidate order in their source locator, but they do not attest the page's sort direction, oldest/newest boundary, a bidirectional census cut, or creation-time chronology. Those are proposed closure witnesses and remain pending until the relevant UI surfaces can be observed without inference. Exact creation time, style prompt, lyrics, lyric-generation prompt, and historical lineage remain a separate detail-surface witness.

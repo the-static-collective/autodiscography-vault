@@ -40,6 +40,7 @@ The external preservation deadline recorded by the project is **September 3, 202
 
 - **no 25-track transport button**;
 - no claim that `ui_exhausted` proves provider completeness;
+- no bidirectional chronological closure claim, witnessed oldest/newest boundary, or attested traversal direction;
 - no full-corpus media transport or hidden provider endpoint adapter;
 - no exact detail-field capture until a real detail-surface witness proves provider creation time, style prompt, lyrics, and lyric-generation prompt exposure;
 - no stems or Studio project export acquisition in B2C;

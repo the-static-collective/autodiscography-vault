@@ -129,4 +129,6 @@ The auto-scroll gates additionally prove that an uncheckpointed viewport is repl
 
 The auto-scroll candidate observes only ordinary signed-in library-card DOM, one explicit round at a time. It has no provider network, request-header, cookie, browser-storage, or hidden-pagination authority. `ui_exhausted` means only that repeated rendered bottom rounds were stable; it is not renamed provider completeness. A real signed-in library specimen must still prove current card identity and exhaustion behavior before this candidate is treated as the observed population path.
 
+The current candidate receipts run/round/candidate sequence but not an attested sort direction or chronological boundary. Oldest-to-newest and newest-to-oldest reconciliation, a shared census-cut identity, and raw provider creation dates are promising closure witnesses only after their actual UI surfaces are observed. Until then they remain proposals, not silently derived capture facts.
+
 Library cards do not establish exact historical detail. Their envelopes therefore mark provider creation time, style prompt, lyrics text, lyric-generation prompt, parent identity, and WAV state as `not_observed`. A separately witnessed detail-surface adapter must preserve exact strings and provider timestamps without trimming, aliasing, carry-forward, or substituting `observedAt`.
