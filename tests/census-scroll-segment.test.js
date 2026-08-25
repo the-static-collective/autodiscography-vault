@@ -91,4 +91,3 @@ test('segment parsing fails closed on mismatched lineage or extra authority fiel
     /invalid census scroll segment JSON/,
   );
 });
-

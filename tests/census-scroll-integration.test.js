@@ -55,4 +55,3 @@ test('side panel exposes operator-started resumable census and persists every ro
   assert.equal(/chrome\.storage|localStorage|sessionStorage/.test(panel), false);
   assert.equal(/provider_complete/.test(`${html}\n${panel}`), false);
 });
-
