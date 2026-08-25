@@ -415,7 +415,7 @@
     return `node:${index}`;
   }
 
-  function extractSunoCandidates(documentLike) {
+  function extractGroupedSunoCandidates(documentLike) {
     if (!documentLike?.querySelectorAll) return { candidateNodeCount: 0, candidates: [] };
 
     const nodes = Array.from(documentLike.querySelectorAll(CANDIDATE_SELECTORS.join(',')));
@@ -431,8 +431,25 @@
       }
     }
 
-    return { candidateNodeCount: nodes.length, candidates: Array.from(grouped.values()).slice(0, MAX_TRACKS) };
+    return { candidateNodeCount: nodes.length, candidates: Array.from(grouped.values()) };
   }
 
-  globalThis.AutodiscographyVaultSuno = Object.freeze({ MAX_TRACKS, buildLiveObservation, extractSunoCandidates });
+  function extractSunoCandidates(documentLike) {
+    const extracted = extractGroupedSunoCandidates(documentLike);
+    return {
+      candidateNodeCount: extracted.candidateNodeCount,
+      candidates: extracted.candidates.slice(0, MAX_TRACKS),
+    };
+  }
+
+  function extractSunoCensusCandidates(documentLike) {
+    return extractGroupedSunoCandidates(documentLike);
+  }
+
+  globalThis.AutodiscographyVaultSuno = Object.freeze({
+    MAX_TRACKS,
+    buildLiveObservation,
+    extractSunoCandidates,
+    extractSunoCensusCandidates,
+  });
 })();
