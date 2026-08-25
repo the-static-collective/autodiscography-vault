@@ -3,7 +3,6 @@ import { createReadStream } from 'node:fs';
 import {
   copyFile,
   chmod,
-  link,
   mkdir,
   open,
   readFile,
@@ -132,15 +131,7 @@ async function commitRawSource({ inputPath, vaultRoot, identity }) {
     if (copied.byteLength !== identity.byteLength || copied.sha256 !== identity.sha256) {
       throw new Error('raw observation changed during admission');
     }
-    try {
-      await link(partialPath, rawPath);
-    } catch (error) {
-      if (error?.code !== 'EEXIST') throw error;
-      const concurrent = await verifyFileStreaming(rawPath);
-      if (concurrent.byteLength !== identity.byteLength || concurrent.sha256 !== identity.sha256) {
-        throw new Error('immutable raw observation identity mismatch');
-      }
-    }
+    await rename(partialPath, rawPath);
   } finally {
     await unlink(partialPath).catch(error => {
       if (error?.code !== 'ENOENT') throw error;
