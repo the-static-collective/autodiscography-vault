@@ -2,6 +2,8 @@ const CANONICAL_UTC_ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const EXPLICIT_OFFSET_RFC3339 = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?(Z|[+-]\d{2}:\d{2})$/;
 const SHA256_HEX = /^[a-f0-9]{64}$/;
 const REASON_CODE = /^[a-z0-9][a-z0-9_-]{0,127}$/;
+const CAPTURE_ADAPTER = /^[a-z0-9][a-z0-9._-]{0,127}\/v[1-9]\d*$/;
+const SOURCE_SURFACE = /^[a-z0-9][a-z0-9_-]{0,127}$/;
 const DURABLE_CREDENTIAL_VALUE = /\bbearer\s+[A-Za-z0-9._~+/=-]+/i;
 const REQUIRED_EVIDENCE = Object.freeze([
   'providerTrackId',
@@ -330,8 +332,12 @@ export function normalizeCensusObservation(input, provenance) {
   if (input.provider !== 'suno') throw new Error('provider must be suno');
   assertCanonicalUtc(input.observedAt, 'observedAt');
   if (!isObject(input.source)) throw new Error('source evidence is required');
-  requireString(input.source.kind, 'source.kind');
-  requireString(input.source.locator, 'source.locator');
+  const sourceKind = requireString(input.source.kind, 'source.kind');
+  const sourceLocator = requireString(input.source.locator, 'source.locator');
+  const sourceAdapter = requireString(input.source.adapter, 'source.adapter');
+  const sourceSurface = requireString(input.source.surface, 'source.surface');
+  if (!CAPTURE_ADAPTER.test(sourceAdapter)) throw new Error('source.adapter must be explicitly versioned');
+  if (!SOURCE_SURFACE.test(sourceSurface)) throw new Error('source.surface must be a bounded profile name');
   if (!isObject(input.payload)) throw new Error('payload must be an object');
   if (!isObject(input.evidence)) throw new Error('evidence must be an object');
   assertProvenance(provenance);
@@ -381,8 +387,10 @@ export function normalizeCensusObservation(input, provenance) {
     provider: 'suno',
     observedAt: input.observedAt,
     source: {
-      kind: input.source.kind,
-      locator: input.source.locator,
+      kind: sourceKind,
+      locator: sourceLocator,
+      adapter: sourceAdapter,
+      surface: sourceSurface,
     },
     rawProvenance: { ...provenance },
     fields: {
