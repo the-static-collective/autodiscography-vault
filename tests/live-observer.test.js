@@ -197,6 +197,34 @@ test('census extraction preserves every currently rendered grouped candidate bef
   assert.equal(census.candidates[39].providerTrackId, 'census-40');
 });
 
+test('census extraction preserves every rendered raw candidate node before pilot grouping', () => {
+  const observer = loadObserver();
+  const sparse = element({
+    tagName: 'A',
+    attributes: { href: 'https://suno.com/song/repeated', 'data-song-id': 'repeated' },
+  });
+  const rich = element({
+    tagName: 'A',
+    attributes: {
+      href: 'https://suno.com/song/repeated',
+      'data-song-id': 'repeated',
+      'data-title': 'Later rendered witness',
+    },
+    textContent: 'Later rendered witness',
+  });
+
+  const documentLike = { querySelectorAll: () => [sparse, rich] };
+  const pilot = observer.extractSunoCandidates(documentLike);
+  const census = observer.extractSunoCensusCandidates(documentLike);
+
+  assert.equal(pilot.candidates.length, 1, 'the bounded pilot may group presentation witnesses');
+  assert.equal(census.candidateNodeCount, 2);
+  assert.equal(census.candidates.length, 2,
+    'the preservation census must not merge two raw rendered nodes at extraction time');
+  assert.equal(census.candidates[0].title, null);
+  assert.equal(census.candidates[1].title, 'Later rendered witness');
+});
+
 test('WAV is proposed and explicit audio/wav surfaces classify as audio_wav', () => {
   const observer = loadObserver();
   const wavUrl = 'https://cdn.example.test/track-wav.wav?sig=ephemeral-secret#download';

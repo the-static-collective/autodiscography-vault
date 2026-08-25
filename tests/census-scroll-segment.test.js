@@ -91,3 +91,33 @@ test('segment parsing fails closed on mismatched lineage or extra authority fiel
     /invalid census scroll segment JSON/,
   );
 });
+
+test('segment durability refuses every credential alias accepted by the controller membrane', () => {
+  for (const key of ['session', 'password', 'passwd', 'secret', 'credential', 'credentials']) {
+    const input = roundResult();
+    input.observations[0].payload = { providerTrackId: 'track-3', nested: { [key]: 'opaque' } };
+    assert.throws(
+      () => buildCensusScrollSegment(input),
+      /reusable authority/,
+      `must refuse credential-shaped field ${key}`,
+    );
+  }
+});
+
+test('segment cloning preserves an own __proto__ field without prototype mutation', () => {
+  const input = roundResult();
+  input.observations[0].payload = JSON.parse(
+    '{"providerTrackId":"track-3","__proto__":{"providerFutureField":true}}',
+  );
+
+  const segment = buildCensusScrollSegment(input);
+  const payload = segment.observations[0].payload;
+  assert.equal(Object.hasOwn(payload, '__proto__'), true);
+  assert.deepEqual(payload.__proto__, { providerFutureField: true });
+  assert.equal({}.providerFutureField, undefined);
+
+  const reparsed = parseCensusScrollSegment(serializeCensusScrollSegment(segment));
+  assert.equal(Object.hasOwn(reparsed.observations[0].payload, '__proto__'), true);
+  assert.deepEqual(reparsed.observations[0].payload.__proto__, { providerFutureField: true });
+  assert.equal({}.providerFutureField, undefined);
+});

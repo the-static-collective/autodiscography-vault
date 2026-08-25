@@ -43,7 +43,18 @@ function observation(id, round, index) {
   };
 }
 
-function segment({ round, ids, seenStableIds, emittedCount, status = 'running' }) {
+function segment({
+  round,
+  ids,
+  seenStableIds,
+  emittedCount,
+  status = 'running',
+  scrollTop = 0,
+  viewportHeight = 800,
+  scrollHeight = 4800,
+  atBottom = false,
+  stableRounds = 0,
+}) {
   const observedAt = `2026-08-25T04:00:0${round}.000Z`;
   return {
     schema: 'autodiscography-vault-census-scroll-segment/v1',
@@ -62,11 +73,11 @@ function segment({ round, ids, seenStableIds, emittedCount, status = 'running' }
       seenStableIds,
       emittedCount,
       scrollMetrics: {
-        scrollTop: status === 'ui_exhausted' ? 4000 : round * 640,
-        viewportHeight: 800,
-        scrollHeight: 4800,
-        atBottom: status === 'ui_exhausted',
-        stableRounds: status === 'ui_exhausted' ? 3 : 0,
+        scrollTop,
+        viewportHeight,
+        scrollHeight,
+        atBottom,
+        stableRounds,
       },
       status,
       updatedAt: observedAt,
@@ -98,7 +109,34 @@ test('scroll segments enter Census v1 without losing exact segment bytes, repeat
   const written = await writeSegments(segmentsDir, [
     segment({ round: 1, ids: ['track-a', 'track-b'], seenStableIds: ['track-a', 'track-b'], emittedCount: 2 }),
     segment({ round: 2, ids: ['track-b', 'track-c'], seenStableIds: ['track-a', 'track-b', 'track-c'], emittedCount: 4 }),
-    segment({ round: 3, ids: [], seenStableIds: ['track-a', 'track-b', 'track-c'], emittedCount: 4, status: 'ui_exhausted' }),
+    segment({
+      round: 3,
+      ids: [],
+      seenStableIds: ['track-a', 'track-b', 'track-c'],
+      emittedCount: 4,
+      scrollTop: 4000,
+      atBottom: true,
+      stableRounds: 1,
+    }),
+    segment({
+      round: 4,
+      ids: [],
+      seenStableIds: ['track-a', 'track-b', 'track-c'],
+      emittedCount: 4,
+      scrollTop: 4000,
+      atBottom: true,
+      stableRounds: 2,
+    }),
+    segment({
+      round: 5,
+      ids: [],
+      seenStableIds: ['track-a', 'track-b', 'track-c'],
+      emittedCount: 4,
+      status: 'ui_exhausted',
+      scrollTop: 4000,
+      atBottom: true,
+      stableRounds: 3,
+    }),
   ]);
 
   await assert.rejects(
@@ -119,7 +157,7 @@ test('scroll segments enter Census v1 without losing exact segment bytes, repeat
   assert.equal(result.captureStatus, 'ui_exhausted');
   assert.equal(result.uiExhausted, true);
   assert.equal('providerComplete' in result, false);
-  assert.equal(result.segmentRecords.length, 3);
+  assert.equal(result.segmentRecords.length, 5);
 
   for (let index = 0; index < written.length; index += 1) {
     assert.equal(result.segmentRecords[index].sha256, written[index].sha256);
@@ -150,7 +188,7 @@ test('scroll segments enter Census v1 without losing exact segment bytes, repeat
   assert.equal(repeated.rawSourceSha256, result.rawSourceSha256);
   assert.equal(repeated.segmentManifestSha256, result.segmentManifestSha256);
   assert.equal((await readdir(join(vaultRoot, 'raw', 'observations'))).length, 1);
-  assert.equal((await readdir(join(vaultRoot, 'raw', 'census-scroll-segments'))).length, 3);
+  assert.equal((await readdir(join(vaultRoot, 'raw', 'census-scroll-segments'))).length, 5);
 });
 
 test('segment lineage gaps and checkpoint rewrites fail before any raw segment admission', async () => {
@@ -168,4 +206,96 @@ test('segment lineage gaps and checkpoint rewrites fail before any raw segment a
     () => readdir(join(vaultRoot, 'raw', 'census-scroll-segments')),
     error => error?.code === 'ENOENT',
   );
+});
+
+test('forged stable IDs and impossible controller transitions fail before raw admission', async () => {
+  const forged = await fixture('scroll-forged-id-refusal');
+  await writeSegments(forged.segmentsDir, [
+    segment({
+      round: 1,
+      ids: ['track-a', 'track-a'],
+      seenStableIds: ['track-a', 'fabricated-track'],
+      emittedCount: 2,
+    }),
+  ]);
+  await assert.rejects(
+    () => ingestCensusScrollSegments({ segmentsDir: forged.segmentsDir, vaultRoot: forged.vaultRoot }),
+    /seen stable IDs|controller transition/i,
+  );
+  await assert.rejects(
+    () => readdir(join(forged.vaultRoot, 'raw', 'census-scroll-segments')),
+    error => error?.code === 'ENOENT',
+  );
+
+  const terminal = await fixture('scroll-impossible-terminal-refusal');
+  await writeSegments(terminal.segmentsDir, [
+    segment({
+      round: 1,
+      ids: ['track-a'],
+      seenStableIds: ['track-a'],
+      emittedCount: 1,
+      status: 'ui_exhausted',
+      scrollHeight: 800,
+      atBottom: true,
+      stableRounds: 3,
+    }),
+  ]);
+  await assert.rejects(
+    () => ingestCensusScrollSegments({ segmentsDir: terminal.segmentsDir, vaultRoot: terminal.vaultRoot }),
+    /stable rounds|controller transition|status/i,
+  );
+  await assert.rejects(
+    () => readdir(join(terminal.vaultRoot, 'raw', 'census-scroll-segments')),
+    error => error?.code === 'ENOENT',
+  );
+});
+
+test('a valid zero-object terminal run preserves an empty-population UI witness', async () => {
+  const { segmentsDir, vaultRoot } = await fixture('scroll-empty-terminal');
+  await writeSegments(segmentsDir, [
+    segment({
+      round: 1,
+      ids: [],
+      seenStableIds: [],
+      emittedCount: 0,
+      scrollHeight: 800,
+      atBottom: true,
+    }),
+    segment({
+      round: 2,
+      ids: [],
+      seenStableIds: [],
+      emittedCount: 0,
+      scrollHeight: 800,
+      atBottom: true,
+      stableRounds: 1,
+    }),
+    segment({
+      round: 3,
+      ids: [],
+      seenStableIds: [],
+      emittedCount: 0,
+      scrollHeight: 800,
+      atBottom: true,
+      stableRounds: 2,
+    }),
+    segment({
+      round: 4,
+      ids: [],
+      seenStableIds: [],
+      emittedCount: 0,
+      status: 'ui_exhausted',
+      scrollHeight: 800,
+      atBottom: true,
+      stableRounds: 3,
+    }),
+  ]);
+
+  const result = await ingestCensusScrollSegments({ segmentsDir, vaultRoot });
+  assert.equal(result.processedRecords, 0);
+  assert.equal(result.captureStatus, 'ui_exhausted');
+  assert.equal(result.uiExhausted, true);
+  assert.equal(result.segmentRecords.length, 4);
+  assert.equal((await readFile(result.rawPath)).byteLength, 0);
+  assert.equal((await readFile(result.normalizedPath)).byteLength, 0);
 });

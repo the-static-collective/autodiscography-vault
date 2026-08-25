@@ -234,6 +234,7 @@ test('provider creation normalization accepts only valid explicit-offset RFC3339
     '03/04/2024',
     '2024-02-03 04:05:06',
     '2024-02-03T04:05:06',
+    '2024-02-03T04:05:06-00:00',
     '2024-02-31T00:00:00Z',
     'yesterday',
   ]) {
@@ -311,7 +312,19 @@ test('historically missing evidence requires exact prior raw-record lineage', ()
 });
 
 test('durable safety refuses credential aliases, bearer values, and signed URL dialects', () => {
-  for (const key of ['authToken', 'sessionId', 'csrfToken', 'jwt', 'authorizationHeader']) {
+  for (const key of [
+    'authToken',
+    'session',
+    'sessionId',
+    'password',
+    'passwd',
+    'secret',
+    'credential',
+    'credentials',
+    'csrfToken',
+    'jwt',
+    'authorizationHeader',
+  ]) {
     assert.throws(
       () => assertDurableObservationSafe({ payload: { [key]: 'opaque' } }),
       /durable credential field refused/,
