@@ -199,7 +199,9 @@ test('ui_exhausted requires bottom plus stable rounds with no new or unidentifie
   });
   assert.equal(discovered.checkpoint.status, 'running');
   assert.equal(discovered.checkpoint.scrollMetrics.stableRounds, 0);
-  assert.deepEqual({ ...discovered.action }, { kind: 'scroll_to', scrollTop: 4000 });
+  assert.deepEqual({ ...discovered.action }, { kind: 'scroll_to', scrollTop: 3840 });
+  assert.ok(discovered.action.scrollTop < discovered.checkpoint.scrollMetrics.scrollHeight,
+    'auto-scroll advances through rendered viewports instead of jumping over lazy-loaded cards');
 
   const grew = controller.advance({
     checkpoint: discovered.checkpoint,
