@@ -2,7 +2,7 @@
 
 ## Status
 
-Implementation candidate stacked on the Phase-B2C branch. This design authorizes a local ingest engine for already-captured durable-safe observation packs. It does not authorize full-corpus browser acquisition while the one-real-WAV gate remains pending.
+Implementation candidate stacked on the Phase-B2C branch. The one-real-WAV gate has passed. This design now includes a user-triggered ordinary-DOM library-card auto-scroll candidate, immutable round/checkpoint segments, and exact local segment admission. It does not claim provider completeness, authorize full-corpus media transport, or mark detail fields observed without a separate witness.
 
 Tracking: issues #11 and #12.
 
@@ -72,6 +72,14 @@ The content address is the identity. An existing address is accepted only after 
 
 Unknown provider fields remain in the raw pack even when Census v1 has no mapping for them. The normalized record includes the raw pack hash, exact record offset, exact record length, exact record hash, and a top-level unmapped-field pointer list.
 
+Auto-scroll capture first preserves each round byte-for-byte at:
+
+```text
+raw/census-scroll-segments/<segment-sha256>.json
+```
+
+Each segment binds the ordered raw observations to the exact resume checkpoint returned by that round. Local admission verifies one run ID, unique contiguous rounds from 1, unchanged configuration, monotonic timestamps, cumulative emitted counts, and non-rewritten stable-ID history before building the deterministic NDJSON observation pack. Repeat observations are not removed from raw history.
+
 ## Reproducible normalization
 
 The projection lives at:
@@ -115,6 +123,10 @@ The automated gates prove:
 5. provider creation time, style prompt, lyrics, lyric-generation prompt state, and `observedAt` remain separate;
 6. explicit credential material is refused before raw admission.
 
-## Deferred source adapter
+The auto-scroll gates additionally prove that an uncheckpointed viewport is replayed, a checkpoint cannot skip over lazy cards by jumping directly to the bottom, every round completes local persistence before the next begins, exact segment bytes survive admission, and broken round lineage fails before run admission.
 
-Census v1 deliberately stops at local pack ingest. The source adapter that obtains the complete Suno population must be witnessed against the real signed-in provider surface and must not reconstruct hidden endpoints, persist auth/session capability, or silently omit population classes. Its output contract is now fixed; its browser authority is not.
+## Auto-scroll source boundary and deferred detail adapter
+
+The auto-scroll candidate observes only ordinary signed-in library-card DOM, one explicit round at a time. It has no provider network, request-header, cookie, browser-storage, or hidden-pagination authority. `ui_exhausted` means only that repeated rendered bottom rounds were stable; it is not renamed provider completeness. A real signed-in library specimen must still prove current card identity and exhaustion behavior before this candidate is treated as the observed population path.
+
+Library cards do not establish exact historical detail. Their envelopes therefore mark provider creation time, style prompt, lyrics text, lyric-generation prompt, parent identity, and WAV state as `not_observed`. A separately witnessed detail-surface adapter must preserve exact strings and provider timestamps without trimming, aliasing, carry-forward, or substituting `observedAt`.

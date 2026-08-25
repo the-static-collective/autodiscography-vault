@@ -1,13 +1,13 @@
 # Network Behavior
 
-## Phase B2C: page witness plus one optional browser-held transport capability
+## Phase B2C and Census v1: page witness plus optional local-file capability
 
 The permanent Manifest V3 content script remains limited to:
 
 - `https://suno.com/*`
 - `https://www.suno.com/*`
 
-It reads DOM-visible provider evidence only when the Vault side panel requests observation. It does not call `fetch`, `XMLHttpRequest`, `WebSocket`, cookie APIs, request-header interception APIs, or `chrome.downloads`.
+It reads DOM-visible provider evidence only when the Vault side panel requests a bounded live witness or one explicit census round. Census advances with an ordinary `scrollTo` action smaller than one viewport. The content script does not call `fetch`, `XMLHttpRequest`, `WebSocket`, cookie APIs, request-header interception APIs, browser storage, or `chrome.downloads`.
 
 The extension manifest intentionally has:
 
@@ -35,9 +35,21 @@ The side panel requests:
 chrome.permissions.request({ permissions: ['downloads'] })
 ```
 
-only when the operator presses **Enable pilot transport**. Denial leaves live observation available and transport locked.
+only when the operator presses **Enable pilot transport** or **Start auto-scroll census**. Denial leaves live observation available and both local-file paths locked.
 
 The extension does not require permission-gated Downloads APIs before that grant. After grant, the current one-track pilot may use `chrome.downloads.download`, `chrome.downloads.onCreated`, `chrome.downloads.onChanged`, and a specific `chrome.downloads.search({ id })` lookup.
+
+### Auto-scroll round path
+
+The side panel asks the content script to observe the currently rendered cards, advances the pure checkpoint controller, and creates a local `application/json` Blob. It downloads that Blob under:
+
+```text
+Autodiscography-Vault/<run-id>/census/round-<round>.json
+```
+
+The panel waits for that exact download ID to reach `complete` before adopting the returned checkpoint or scheduling another viewport. A failure pauses the run at the last completed segment. The Blob contains only durable-safe observation envelopes and checkpoint state; it contains no provider transport URL or session capability.
+
+On resume, the user selects one completed segment. The page restarts from the top so an uncommitted viewport is replayed. The checkpoint's stable-ID set is derived control state; it never deletes repeat observations from the raw round.
 
 ### Direct observed-asset path
 
@@ -95,4 +107,4 @@ There is no analytics transport, crash upload, corpus sync, Vercel hop, or third
 
 ## Closed gates
 
-Phase B2C does not enable 25-track or full-corpus transport, stems, Studio exports, or hidden endpoint reconstruction. Those gates remain closed until the one-real-WAV human specimen proves the signed-in flow without reusable authentication extraction.
+The one-real-WAV human specimen proved the signed-in flow without reusable authentication extraction. The auto-scroll code is an automated ordinary-DOM candidate, but it has not yet passed a real-library population witness. `ui_exhausted` is deliberately narrower than provider completeness. Phase B2C still does not enable 25-track or full-corpus media transport, exact detail-field capture, stems, Studio exports, or hidden endpoint reconstruction. Those capabilities remain closed until their own bounded designs and witnesses succeed.

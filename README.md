@@ -2,7 +2,7 @@
 
 Local-first preservation instrument for the Static Collective's Autodiscography corpus.
 
-**Current state: Phase B2C one-WAV candidate plus a local-only Census v1 ingest engine. The real signed-in WAV remains the browser acquisition gate; Census v1 can preserve already-captured durable-safe observation packs without opening full-corpus browser authority.**
+**Current state: the Phase B2C one-real-WAV gate has passed. Census v1 now has a user-triggered ordinary-DOM auto-scroll candidate, immutable resumable round files, exact segment admission, and reproducible normalization. A real-library auto-scroll witness and a separate exact-detail-field witness are still required.**
 
 The external preservation deadline recorded by the project is **September 3, 2026**. Urgency may accelerate transport work; it does not widen the trust boundary.
 
@@ -13,9 +13,13 @@ The external preservation deadline recorded by the project is **September 3, 202
 - Manifest V3 Chromium side panel;
 - a permanent read-only content script limited to `https://suno.com/*` and `https://www.suno.com/*`;
 - live DOM witness aggregation by provider identity before the 25-track observation cap;
+- an uncapped census extraction seam that observes every library card currently rendered without changing the bounded 25-track pilot witness;
+- a user-started incremental auto-scroll controller with explicit serializable checkpoints and `ui_exhausted` as a UI-only terminal state;
+- one completed immutable local JSON segment, containing raw observations plus its exact resume checkpoint, before each next viewport;
+- restart from the last completed segment with stable-ID deduplication confined to checkpoint state and raw re-observations retained;
 - `proposedAssets` kept distinct from actually observed media/link transport surfaces;
 - first-class `audio_wav` proposal/classification for honest `.wav` / WAV MIME surfaces;
-- Chrome `downloads` declared only as an optional permission and requested only from **Enable pilot transport**;
+- Chrome `downloads` declared only as an optional permission and requested only from **Enable pilot transport** or **Start auto-scroll census**;
 - direct one-asset staging for an actually observed transport URL;
 - a separate one-shot **Witness one WAV** arm for the operator's normal Suno Download → WAV action when no honest DOM WAV URL exists;
 - future-only Chrome WAV binding, explicit ambiguity refusal, and completed local filename lookup;
@@ -29,12 +33,15 @@ The external preservation deadline recorded by the project is **September 3, 202
 - explicit field evidence for provider creation time, exact style prompt, exact lyrics, original lyric-generation prompt, parent, and WAV availability;
 - typed negative space that keeps `known_null`, `not_observed`, `not_exposed`, `unavailable`, `refused`, `failed_to_fetch`, `artifact_known_bytes_unavailable`, and `historically_observed_now_missing` distinct;
 - checkpointed normalization that safely truncates uncheckpointed derived tail bytes and resumes without duplicating raw history;
+- `census:ingest-scroll`, which validates one contiguous run, preserves each exact segment byte-for-byte, assembles a deterministic non-deduplicated observation pack, and enters the existing resumable normalizer;
 - explicit verified/incomplete/refusal states and adversarial tests for corruption, torn journals, secret-shaped material, permission creep, and WAV mislabeling.
 
 ## What remains closed
 
 - **no 25-track transport button**;
-- no full-corpus **browser acquisition** or hidden provider endpoint adapter;
+- no claim that `ui_exhausted` proves provider completeness;
+- no full-corpus media transport or hidden provider endpoint adapter;
+- no exact detail-field capture until a real detail-surface witness proves provider creation time, style prompt, lyrics, and lyric-generation prompt exposure;
 - no stems or Studio project export acquisition in B2C;
 - no hidden WAV endpoint reconstruction;
 - no cookies/session/token extraction;
@@ -63,11 +70,23 @@ npm run census:ingest -- \
 
 The command first admits the exact input pack under its content hash, then builds a reproducible normalized projection. A later interpretation layer is deliberately not built. See [`docs/CENSUS-RUNBOOK.md`](docs/CENSUS-RUNBOOK.md).
 
+For completed extension auto-scroll rounds from one run:
+
+```bash
+npm run census:ingest-scroll -- \
+  --segments <path-to-run/census> \
+  --vault-root <local-or-external-drive-vault-root>
+```
+
+The extension requests optional Downloads authority only from an explicit user action and writes local Blob-backed segment files; the Suno content script itself has no downloads, network, cookie, header, or storage authority. Confirm current provider terms and your authorization before running UI automation.
+
 `pilot:admit` accepts local bytes and non-secret evidence only. It has no provider transport-URL argument. For a direct observed transport, `--request-descriptor-sha256` remains available. For a user-triggered WAV witness with no honest request descriptor, that flag is intentionally omitted.
 
 The extension now generates the Windows command after a completed staging event and a Vault root are supplied. The manual command is **temporary proof ceremony**; a later local companion is intended to remove the PowerShell step while reusing the same admission boundary.
 
-## Phase B2C human WAV witness
+## Phase B2C human WAV witness — passed
+
+The successful real signed-in specimen and its independently matched receipt are recorded in [PR #9](https://github.com/the-static-collective/autodiscography-vault/pull/9). The steps below remain the reproducibility ceremony for another specimen; they are no longer an unmet prerequisite for Census v1.
 
 Load `extension/` as an unpacked Chromium extension and sign in normally at Suno.
 
@@ -83,11 +102,11 @@ Load `extension/` as an unpacked Chromium extension and sign in normally at Suno
 10. Independently compute the final file SHA-256 and byte length and compare them with the receipt.
 11. Inspect `receipts/acquisition.jsonl` and `receipts/handoff.json` and confirm they contain no signed URL/query/fragment, cookie, authorization header, token, session material, or browser storage.
 
-Until this specimen passes, **Acquire 25-track pilot remains disabled**.
+The specimen passed. **Acquire 25-track pilot remains disabled** until a separate bounded multi-item design is reviewed and witnessed; the one-WAV proof does not silently authorize batching or full-corpus transport.
 
 ## Operator boundary
 
-Read before the human specimen:
+Read before any preservation run:
 
 - [`docs/TRUST-BOUNDARY.md`](docs/TRUST-BOUNDARY.md)
 - [`docs/NETWORK-BEHAVIOR.md`](docs/NETWORK-BEHAVIOR.md)
