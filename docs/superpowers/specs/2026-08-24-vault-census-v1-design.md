@@ -123,7 +123,7 @@ The automated gates prove:
 5. provider creation time, style prompt, lyrics, lyric-generation prompt state, and `observedAt` remain separate;
 6. explicit credential material is refused before raw admission.
 
-The auto-scroll gates additionally prove that an uncheckpointed viewport is replayed, a checkpoint cannot skip over lazy cards by jumping directly to the bottom, observation itself cannot scroll, a separate action is applied only after exact round persistence completes, every rendered node survives before derived stable-ID deduplication, exact segment bytes survive admission, zero-object terminal evidence survives, and forged controller transitions fail before run admission.
+The auto-scroll gates additionally prove that an uncheckpointed viewport is replayed, a checkpoint cannot skip over lazy cards by jumping directly to the bottom, observation itself cannot scroll, a one-shot run/round/surface-bound action is applied only after exact round persistence completes, Stop/Start generations reject stale async completions, reset and post-scroll viewports require repeated bounded stability probes, every rendered node survives before derived stable-ID deduplication, exact segment bytes survive admission, zero-object terminal evidence survives, and forged controller transitions fail before run admission.
 
 ## Auto-scroll source boundary and deferred detail adapter
 

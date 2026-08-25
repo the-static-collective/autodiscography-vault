@@ -117,6 +117,12 @@ test('content-script observation is side-effect free until an explicit post-pers
     listener(message, {}, value => { response = value; });
     return response;
   };
+  const probe = send({ type: 'vault:census-scroll:probe' });
+  assert.equal(probe.status, 'ready');
+  assert.equal(probe.candidateNodeCount, 0);
+  assert.match(probe.renderSignature, /^[a-f0-9]{8}$/);
+  assert.equal(probe.scrollMetrics.scrollTop, 0);
+
   const freshApply = send({
     type: 'vault:census-scroll:apply',
     runId: round.runId,

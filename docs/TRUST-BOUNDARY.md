@@ -69,11 +69,12 @@ Each bounded live-pilot observation:
 
 ## Auto-scroll census law
 
-The same Suno-matched content script may perform one user-requested census round at a time. It first reads ordinary DOM card evidence without moving the page. Only after the side panel completes that round's local immutable download may a separate message apply the proposed incremental `scrollTo`. The content script has no network, downloads, cookie, request-header, or browser-storage authority.
+The same Suno-matched content script may perform one user-requested census round at a time. It first reads ordinary DOM card evidence without moving the page. Only after the side panel completes that round's local immutable download may a separate message consume the one-shot proposed incremental `scrollTo`, and only on the unchanged run, round, page, scroller, rendered fingerprint, and viewport metrics that produced it. The content script has no network, downloads, cookie, request-header, or browser-storage authority.
 
 Each census run:
 
 - starts or restarts at the top of the current library surface;
+- requires repeated stable render/scroll probes at the reset top and after every applied action, with a bounded pause-on-timeout;
 - observes every currently rendered candidate node rather than grouping raw census evidence or applying the 25-track pilot cap;
 - emits one immutable raw observation per rendered card, including repeated observations across rounds;
 - uses only an actually observed stable provider ID for derived checkpoint deduplication;
@@ -81,6 +82,7 @@ Each census run:
 - moves by less than one viewport so lazy-rendered cards are not intentionally jumped over;
 - saves raw observations and the exact next checkpoint together in one local JSON segment;
 - waits for that segment download to complete before adopting its checkpoint, applying its action, or advancing again;
+- invalidates stale async continuations on Stop or replacement Start so runs cannot bleed into each other;
 - reaches `ui_exhausted` only after repeated bottom rounds have no new IDs, no unknown IDs, and stable scroll height;
 - never relabels `ui_exhausted` as provider completeness.
 

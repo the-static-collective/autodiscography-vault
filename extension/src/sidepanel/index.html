@@ -16,7 +16,7 @@
 
     <section class="gate" aria-labelledby="census-scroll-heading">
       <h2 id="census-scroll-heading">Resumable library auto-scroll</h2>
-      <p>From your signed-in Suno library, start an ordinary-DOM census. Vault saves one immutable JSON round with its exact checkpoint before advancing to the next rendered viewport.</p>
+      <p>From your signed-in Suno library, start an ordinary-DOM census. Vault waits for bounded rendered-state stability, saves one immutable JSON round with its exact checkpoint, then applies that round's one-shot bound scroll action.</p>
       <p>Stopping or crashing is safe: select the last completed round file to replay from its checkpoint. Stable IDs are deduplicated only in checkpoint state; raw re-observations remain intact.</p>
       <label for="census-scroll-resume">Optional completed round file to resume</label>
       <input id="census-scroll-resume" type="file" accept="application/json,.json">

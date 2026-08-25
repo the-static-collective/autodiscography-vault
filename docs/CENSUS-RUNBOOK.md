@@ -26,7 +26,7 @@ The adapter is technically bounded to the ordinary signed-in DOM, but that does 
 4. Grant the optional Downloads permission so Vault can complete each local JSON round file before advancing.
 5. Keep that Suno tab open until the panel reports `ui_exhausted`, or press **Stop after last saved round** at any time.
 
-The side panel resets to the top, waits for the rendered DOM to settle, and then advances by less than one viewport. Each round is two-phase: the content script first observes and proposes an action without scrolling; the panel completes the immutable round download; only then may a separate apply message move the page. Each completed file contains that round's raw card observations and the exact checkpoint needed for restart:
+The side panel resets to the top and requires repeated stable scroll metrics plus a safe rendered-card fingerprint before the first observation. Each round is two-phase: the content script first observes and proposes an action without scrolling; the panel completes the immutable round download; only then may a separate one-shot apply message move the same run, round, page surface, scroller, and unchanged observed viewport. The next observation again waits for bounded rendered-state stability at the expected scroll position. A surface that does not settle within the bounded wait pauses rather than being called observed. Each completed file contains that round's raw card observations and the exact checkpoint needed for restart:
 
 ```text
 Downloads/Autodiscography-Vault/<run-id>/census/round-000001.json
@@ -34,7 +34,7 @@ Downloads/Autodiscography-Vault/<run-id>/census/round-000002.json
 ...
 ```
 
-If the panel, tab, browser, or machine stops, select the highest completed round file in **Optional completed round file to resume**, then start again. The page replays from the top. Stable IDs suppress duplication only in checkpoint state; replayed card observations remain raw history.
+If the panel, tab, browser, or machine stops, select the highest completed round file in **Optional completed round file to resume**, then start again. Stop or replacement Start synchronously invalidates older async continuations, so a late download completion cannot overwrite or scroll a new run. The page replays from the top. Stable IDs suppress duplication only in checkpoint state; replayed card observations remain raw history.
 
 `ui_exhausted` means repeated bottom-of-rendered-UI rounds produced no new or unidentified cards and the scroll height stayed stable. It is a terminal UI witness, not a claim that the provider exposed every historical object or population class.
 

@@ -32,6 +32,7 @@ let censusScrollActive = false;
 let censusScrollTimer = null;
 let censusScrollCheckpoint = null;
 let censusScrollTabId = null;
+let censusScrollGeneration = 0;
 
 function appendField(article, label, value) {
   const row = document.createElement('p');
@@ -93,10 +94,21 @@ function setCensusScrollActive(active) {
 }
 
 function stopCensusScroll(status) {
+  censusScrollGeneration += 1;
   if (censusScrollTimer !== null) clearTimeout(censusScrollTimer);
   censusScrollTimer = null;
+  censusScrollCheckpoint = null;
+  censusScrollTabId = null;
   setCensusScrollActive(false);
   if (status) censusScrollStatus.textContent = status;
+}
+
+function isCurrentCensusScroll(generation) {
+  return censusScrollActive && generation === censusScrollGeneration;
+}
+
+function stopCensusScrollIfCurrent(generation, status) {
+  if (isCurrentCensusScroll(generation)) stopCensusScroll(status);
 }
 
 function safeCensusDownloadName(checkpoint) {
@@ -156,34 +168,104 @@ async function persistCensusRound(roundResult) {
   return segment;
 }
 
-async function applyCensusScrollAction(action) {
+async function applyCensusScrollAction({ action, runId, round, tabId }) {
   if (
-    censusScrollTabId === null
+    !Number.isSafeInteger(tabId)
+    || tabId < 0
+    || typeof runId !== 'string'
+    || !runId
+    || !Number.isSafeInteger(round)
+    || round < 1
     || action?.kind !== 'scroll_to'
     || !Number.isFinite(action.scrollTop)
     || action.scrollTop < 0
   ) throw new Error('invalid census scroll action');
-  const applied = await chrome.tabs.sendMessage(censusScrollTabId, {
+  const applied = await chrome.tabs.sendMessage(tabId, {
     type: 'vault:census-scroll:apply',
+    runId,
+    round,
     action,
   });
   if (applied?.status !== 'applied') throw new Error('census scroll action was not applied');
 }
 
+function validatedSettleProbe(probe, requiredTop) {
+  if (
+    probe?.status !== 'ready'
+    || !Number.isSafeInteger(probe.candidateNodeCount)
+    || probe.candidateNodeCount < 0
+    || typeof probe.renderSignature !== 'string'
+    || !/^[a-f0-9]{8}$/.test(probe.renderSignature)
+    || !probe.scrollMetrics
+  ) throw new Error('invalid census scroll settle probe');
+  const { scrollTop, viewportHeight, scrollHeight } = probe.scrollMetrics;
+  for (const value of [scrollTop, viewportHeight, scrollHeight]) {
+    if (!Number.isFinite(value) || value < 0) throw new Error('invalid census scroll settle metrics');
+  }
+  return {
+    atRequiredTop: requiredTop === null || Math.abs(scrollTop - requiredTop) <= 1,
+    signature: JSON.stringify([
+      scrollTop,
+      viewportHeight,
+      scrollHeight,
+      probe.candidateNodeCount,
+      probe.renderSignature,
+    ]),
+  };
+}
+
+async function waitForCensusScrollSettled({
+  generation,
+  tabId,
+  requiredTop = null,
+  minWaitMs = 600,
+  maxWaitMs = 10_000,
+  stableProbes = 3,
+} = {}) {
+  const startedAt = Date.now();
+  let priorSignature = null;
+  let consecutiveStableProbes = 0;
+  while (isCurrentCensusScroll(generation)) {
+    const probe = await chrome.tabs.sendMessage(tabId, { type: 'vault:census-scroll:probe' });
+    if (!isCurrentCensusScroll(generation)) return false;
+    const validated = validatedSettleProbe(probe, requiredTop);
+    if (validated.atRequiredTop && validated.signature === priorSignature) {
+      consecutiveStableProbes += 1;
+    } else {
+      consecutiveStableProbes = validated.atRequiredTop ? 1 : 0;
+      priorSignature = validated.signature;
+    }
+
+    const elapsed = Date.now() - startedAt;
+    if (elapsed >= minWaitMs && consecutiveStableProbes >= stableProbes) return true;
+    if (elapsed >= maxWaitMs) throw new Error('census scroll surface did not settle');
+    await new Promise(resolve => setTimeout(resolve, 200));
+  }
+  return false;
+}
+
 async function advanceCensusScroll() {
   if (!censusScrollActive || censusScrollTabId === null || !censusScrollCheckpoint) return;
+  const generation = censusScrollGeneration;
+  const tabId = censusScrollTabId;
+  const checkpoint = censusScrollCheckpoint;
   try {
-    const result = await chrome.tabs.sendMessage(censusScrollTabId, {
+    const result = await chrome.tabs.sendMessage(tabId, {
       type: 'vault:census-scroll:advance',
-      checkpoint: censusScrollCheckpoint,
+      checkpoint,
       observedAt: new Date().toISOString(),
     });
+    if (!isCurrentCensusScroll(generation)) return;
     if (!result || result.status === 'refused') {
-      stopCensusScroll(`Census refused: ${result?.reasonCode ?? 'unsupported_census_scroll_surface'}.`);
+      stopCensusScrollIfCurrent(
+        generation,
+        `Census refused: ${result?.reasonCode ?? 'unsupported_census_scroll_surface'}.`,
+      );
       return;
     }
 
     const segment = await persistCensusRound(result);
+    if (!isCurrentCensusScroll(generation)) return;
     censusScrollCheckpoint = segment.checkpoint;
     censusScrollStatus.textContent = [
       `Saved round ${segment.round}.`,
@@ -192,17 +274,32 @@ async function advanceCensusScroll() {
     ].join(' ');
 
     if (segment.status === 'ui_exhausted') {
-      stopCensusScroll(
+      stopCensusScrollIfCurrent(
+        generation,
         `${censusScrollStatus.textContent} ui_exhausted is a terminal UI witness, not provider completeness.`,
       );
       return;
     }
-    if (!censusScrollActive) return;
-    await applyCensusScrollAction(result.action);
-    if (!censusScrollActive) return;
-    censusScrollTimer = setTimeout(advanceCensusScroll, 1400);
+    await applyCensusScrollAction({
+      action: result.action,
+      runId: segment.runId,
+      round: segment.round,
+      tabId,
+    });
+    if (!isCurrentCensusScroll(generation)) return;
+    censusScrollStatus.textContent += ' Waiting for the new rendered viewport to settle…';
+    const maximumTop = Math.max(
+      0,
+      segment.checkpoint.scrollMetrics.scrollHeight
+        - segment.checkpoint.scrollMetrics.viewportHeight,
+    );
+    const requiredTop = Math.min(result.action.scrollTop, maximumTop);
+    const settled = await waitForCensusScrollSettled({ generation, tabId, requiredTop });
+    if (!settled || !isCurrentCensusScroll(generation)) return;
+    censusScrollTimer = setTimeout(advanceCensusScroll, 0);
   } catch {
-    stopCensusScroll(
+    stopCensusScrollIfCurrent(
+      generation,
       'Census paused safely. Resume from the last completed round file; the unsaved viewport will be replayed.',
     );
   }
@@ -210,6 +307,8 @@ async function advanceCensusScroll() {
 
 async function startCensusScroll() {
   stopCensusScroll();
+  const generation = censusScrollGeneration;
+  setCensusScrollActive(true);
   censusScrollStatus.textContent = 'Preparing explicit local round-file persistence…';
 
   if (
@@ -220,50 +319,77 @@ async function startCensusScroll() {
     || !globalThis.chrome?.downloads?.search
     || !globalThis.chrome?.downloads?.onChanged
   ) {
-    censusScrollStatus.textContent = 'Census unavailable: required local browser capabilities are absent.';
+    stopCensusScrollIfCurrent(
+      generation,
+      'Census unavailable: required local browser capabilities are absent.',
+    );
     return;
   }
 
   try {
     const granted = await chrome.permissions.request({ permissions: ['downloads'] });
+    if (!isCurrentCensusScroll(generation)) return;
     if (!granted) {
-      censusScrollStatus.textContent = 'Census refused: downloads permission is required to preserve each round before continuing.';
+      stopCensusScrollIfCurrent(
+        generation,
+        'Census refused: downloads permission is required to preserve each round before continuing.',
+      );
       return;
     }
 
     let resumeCheckpoint = null;
     const resumeFile = censusScrollResume.files?.[0];
     if (resumeFile) {
-      const segment = parseCensusScrollSegment(await resumeFile.text());
+      const resumeText = await resumeFile.text();
+      if (!isCurrentCensusScroll(generation)) return;
+      const segment = parseCensusScrollSegment(resumeText);
       if (segment.status === 'ui_exhausted') {
-        censusScrollStatus.textContent = 'Resume refused: that segment already records ui_exhausted.';
+        stopCensusScrollIfCurrent(
+          generation,
+          'Resume refused: that segment already records ui_exhausted.',
+        );
         return;
       }
       resumeCheckpoint = segment.checkpoint;
     }
 
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.id) throw new Error('active tab unavailable');
+    if (!isCurrentCensusScroll(generation)) return;
+    if (!Number.isSafeInteger(tab?.id) || tab.id < 0) throw new Error('active tab unavailable');
     const created = await chrome.tabs.sendMessage(tab.id, {
       type: 'vault:census-scroll:create',
       ...(resumeCheckpoint
         ? { checkpoint: resumeCheckpoint }
         : { runId: censusRunId(), observedAt: new Date().toISOString() }),
     });
+    if (!isCurrentCensusScroll(generation)) return;
     if (!created || created.status !== 'ready' || !created.checkpoint) {
-      censusScrollStatus.textContent = `Census refused: ${created?.reasonCode ?? 'unsupported_census_scroll_surface'}.`;
+      stopCensusScrollIfCurrent(
+        generation,
+        `Census refused: ${created?.reasonCode ?? 'unsupported_census_scroll_surface'}.`,
+      );
       return;
     }
 
+    censusScrollStatus.textContent = 'Waiting for reset-to-top cards and scroll metrics to settle…';
+    const settled = await waitForCensusScrollSettled({
+      generation,
+      tabId: tab.id,
+      requiredTop: 0,
+      minWaitMs: 1400,
+    });
+    if (!settled || !isCurrentCensusScroll(generation)) return;
     censusScrollCheckpoint = created.checkpoint;
     censusScrollTabId = tab.id;
-    setCensusScrollActive(true);
     censusScrollStatus.textContent = resumeCheckpoint
       ? `Resuming run ${resumeCheckpoint.runId} from saved round ${resumeCheckpoint.round}; replay starts at the top.`
       : `Started run ${created.checkpoint.runId}; each viewport is saved before the next round.`;
-    censusScrollTimer = setTimeout(advanceCensusScroll, 1400);
+    censusScrollTimer = setTimeout(advanceCensusScroll, 0);
   } catch {
-    stopCensusScroll('Census refused or paused before a new durable round was recorded.');
+    stopCensusScrollIfCurrent(
+      generation,
+      'Census refused or paused before a new durable round was recorded.',
+    );
   }
 }
 
@@ -635,7 +761,7 @@ refreshLive.addEventListener('click', requestLiveObservation);
 enableTransport.addEventListener('click', requestTransportPermission);
 censusScrollStart.addEventListener('click', startCensusScroll);
 censusScrollStop.addEventListener('click', () => {
-  stopCensusScroll('Census stopped. Resume from the last completed round file; no unsaved round is claimed.');
+  stopCensusScroll('Census stopped. Resume from the highest completed round file; no incomplete round is claimed.');
 });
 vaultRootInput.addEventListener('input', renderAdmissionHandoff);
 copyAdmitCommand.addEventListener('click', copyAdmissionCommand);
