@@ -194,11 +194,13 @@ test('later missing parent, prompt, and artifact remain typed absence without ca
       stylePromptRaw: {
         state: 'historically_observed_now_missing',
         reasonCode: 'provider_no_longer_exposes_field',
+        priorRawRecordSha256: 'd'.repeat(64),
       },
       lyricsTextRaw: { state: 'observed', pointer: '/lyrics' },
       lyricGenerationPromptRaw: {
         state: 'historically_observed_now_missing',
         reasonCode: 'provider_no_longer_exposes_field',
+        priorRawRecordSha256: 'e'.repeat(64),
       },
       parentProviderTrackId: {
         state: 'not_observed',
@@ -223,6 +225,7 @@ test('later missing parent, prompt, and artifact remain typed absence without ca
   assert.deepEqual(normalized[1].fields.lyricGenerationPromptRaw, {
     state: 'historically_observed_now_missing',
     reasonCode: 'provider_no_longer_exposes_field',
+    priorRawRecordSha256: 'e'.repeat(64),
   });
   assert.deepEqual(normalized[1].fields.parentProviderTrackId, {
     state: 'not_observed',

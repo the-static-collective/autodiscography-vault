@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  assertDurableObservationSafe,
   FIELD_STATES,
   normalizeCensusObservation,
 } from '../packages/census-contract/index.js';
@@ -23,7 +24,7 @@ function observation(overrides = {}) {
     },
     payload: {
       id: 'track-alpha',
-      created_at: '2024-02-03 04:05:06+00:00',
+      created_at: '2024-02-03T04:05:06+00:00',
       metadata: {
         style_prompt: '  glitch-hop, Φ³\nNO smoothing; [raw]  ',
         lyrics: '[Verse 1]\nExact  spacing\n\n✠ keep punctuation.',
@@ -70,7 +71,7 @@ test('exact provider prompt provenance remains distinct from normalization and o
   });
   assert.deepEqual(normalized.fields.providerCreatedAtRaw, {
     state: 'observed',
-    value: '2024-02-03 04:05:06+00:00',
+    value: '2024-02-03T04:05:06+00:00',
     sourcePointer: '/created_at',
   });
   assert.deepEqual(normalized.fields.providerCreatedAtNormalized, {
@@ -110,10 +111,11 @@ test('typed negative space is required and is never helpfully completed', () => 
     },
     evidence: {
       providerTrackId: { state: 'observed', pointer: '/id' },
-      providerCreatedAtRaw: { state: 'observed', pointer: '/created_at' },
+      providerCreatedAtRaw: { state: 'known_null', pointer: '/created_at' },
       stylePromptRaw: {
         state: 'historically_observed_now_missing',
         reasonCode: 'provider_no_longer_exposes_field',
+        priorRawRecordSha256: 'c'.repeat(64),
       },
       lyricsTextRaw: { state: 'known_null', pointer: '/created_at' },
       lyricGenerationPromptRaw: {
@@ -135,6 +137,7 @@ test('typed negative space is required and is never helpfully completed', () => 
   assert.deepEqual(normalized.fields.stylePromptRaw, {
     state: 'historically_observed_now_missing',
     reasonCode: 'provider_no_longer_exposes_field',
+    priorRawRecordSha256: 'c'.repeat(64),
   });
   assert.equal('value' in normalized.fields.stylePromptRaw, false);
   assert.deepEqual(normalized.fields.providerCreatedAtRaw, {
@@ -178,6 +181,129 @@ test('observed evidence must resolve exactly and normalization failure stays exp
     () => normalizeCensusObservation(input, provenance),
     /observed pointer does not resolve: stylePromptRaw/,
   );
+});
+
+test('provider creation normalization accepts only valid explicit-offset RFC3339 timestamps', () => {
+  const valid = observation({
+    payload: {
+      ...observation().payload,
+      created_at: '2024-02-03T04:05:06.123+05:30',
+    },
+  });
+  assert.deepEqual(
+    normalizeCensusObservation(valid, provenance).fields.providerCreatedAtNormalized,
+    {
+      state: 'derived',
+      value: '2024-02-02T22:35:06.123Z',
+      derivedFrom: 'providerCreatedAtRaw',
+    },
+  );
+
+  for (const raw of [
+    '03/04/2024',
+    '2024-02-03 04:05:06',
+    '2024-02-03T04:05:06',
+    '2024-02-31T00:00:00Z',
+    'yesterday',
+  ]) {
+    const input = observation({
+      payload: { ...observation().payload, created_at: raw },
+    });
+    assert.deepEqual(
+      normalizeCensusObservation(input, provenance).fields.providerCreatedAtNormalized,
+      {
+        state: 'normalization_failed',
+        reasonCode: 'invalid_provider_created_at',
+        derivedFrom: 'providerCreatedAtRaw',
+      },
+      `must refuse ambiguous or invalid provider timestamp ${raw}`,
+    );
+  }
+});
+
+test('pointer evidence cannot smuggle values, collapse null, or alias distinct prompt fields', () => {
+  const inline = observation();
+  inline.evidence.stylePromptRaw.value = 'helpful replacement';
+  assert.throws(
+    () => normalizeCensusObservation(inline, provenance),
+    /pointer evidence cannot carry inline value: stylePromptRaw/,
+  );
+
+  const observedNull = observation({
+    payload: { ...observation().payload, created_at: null },
+  });
+  assert.throws(
+    () => normalizeCensusObservation(observedNull, provenance),
+    /observed pointer resolved null: providerCreatedAtRaw/,
+  );
+
+  const aliased = observation();
+  aliased.evidence.lyricGenerationPromptRaw = {
+    state: 'observed',
+    pointer: '/metadata/lyrics',
+  };
+  assert.throws(
+    () => normalizeCensusObservation(aliased, provenance),
+    /distinct exact-text fields cannot share a source pointer/,
+  );
+});
+
+test('exact prompt and lyrics evidence must resolve to strings without truncation or coercion', () => {
+  const input = observation({
+    payload: {
+      ...observation().payload,
+      metadata: { style_prompt: 42, lyrics: { text: 'not the exact field' } },
+    },
+  });
+  assert.throws(
+    () => normalizeCensusObservation(input, provenance),
+    /stylePromptRaw observed value must be a string/,
+  );
+
+  input.payload.metadata.style_prompt = 'exact';
+  assert.throws(
+    () => normalizeCensusObservation(input, provenance),
+    /lyricsTextRaw observed value must be a string/,
+  );
+});
+
+test('historically missing evidence requires exact prior raw-record lineage', () => {
+  const input = observation();
+  input.evidence.stylePromptRaw = {
+    state: 'historically_observed_now_missing',
+    reasonCode: 'provider_no_longer_exposes_field',
+  };
+  assert.throws(
+    () => normalizeCensusObservation(input, provenance),
+    /historically missing evidence requires priorRawRecordSha256: stylePromptRaw/,
+  );
+});
+
+test('durable safety refuses credential aliases, bearer values, and signed URL dialects', () => {
+  for (const key of ['authToken', 'sessionId', 'csrfToken', 'jwt', 'authorizationHeader']) {
+    assert.throws(
+      () => assertDurableObservationSafe({ payload: { [key]: 'opaque' } }),
+      /durable credential field refused/,
+      `must refuse credential-shaped field ${key}`,
+    );
+  }
+
+  assert.throws(
+    () => assertDurableObservationSafe({ payload: { note: 'Bearer abc.def.ghi' } }),
+    /durable credential value refused/,
+  );
+
+  for (const url of [
+    'https://cdn.example.test/object?sig=secret',
+    'https://cdn.example.test/object?X-Goog-Signature=secret',
+    'https://cdn.example.test/object?Expires=9999999999&Key-Pair-Id=K123',
+  ]) {
+    assert.throws(
+      () => assertDurableObservationSafe({ payload: { source: url } }),
+      /durable capability URL refused/,
+      `must refuse capability URL ${url}`,
+    );
+  }
 });
 
 test('field-state vocabulary keeps materially different absences distinct', () => {
