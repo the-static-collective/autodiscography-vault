@@ -6,6 +6,18 @@
   const censusScroll = globalThis.AutodiscographyVaultSunoCensusScroll;
   if (!observer || !globalThis.chrome?.runtime?.onMessage) return;
   let pendingCensusScrollAction = null;
+  let activeCensusScrollSurface = null;
+
+  function randomNonce() {
+    if (typeof globalThis.crypto?.getRandomValues !== 'function') {
+      throw new Error('secure census surface identity is unavailable');
+    }
+    const bytes = new Uint8Array(16);
+    globalThis.crypto.getRandomValues(bytes);
+    return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+  }
+
+  const censusDocumentNonce = randomNonce();
 
   function refused(reasonCode) {
     return {
@@ -29,6 +41,47 @@
     return typeof location.href === 'string'
       ? location.href
       : `${location.origin ?? ''}${location.pathname ?? ''}${location.search ?? ''}${location.hash ?? ''}`;
+  }
+
+  function safeRouteIdentity(identity) {
+    const parsed = new URL(identity);
+    if (
+      parsed.protocol !== 'https:'
+      || !['suno.com', 'www.suno.com'].includes(parsed.hostname)
+      || parsed.username
+      || parsed.password
+    ) throw new Error('unsupported census route identity');
+    return `${parsed.origin}${parsed.pathname}`;
+  }
+
+  function publicSurfaceBinding(surface) {
+    return Object.freeze({
+      documentNonce: surface.documentNonce,
+      routeIdentity: surface.routeIdentity,
+    });
+  }
+
+  function sameSurfaceBinding(candidate, surface) {
+    return candidate?.documentNonce === surface?.documentNonce
+      && candidate?.routeIdentity === surface?.routeIdentity;
+  }
+
+  function validateCensusRunSurface(message, snapshot) {
+    const active = activeCensusScrollSurface;
+    if (active === null) return refused('census_scroll_run_not_created');
+    if (
+      message?.runId !== active.runId
+      || !sameSurfaceBinding(message?.surfaceBinding, active)
+    ) return refused('census_scroll_run_surface_mismatch');
+    if (
+      active.documentNonce !== censusDocumentNonce
+      || active.exactIdentity !== snapshot.surfaceIdentity
+    ) {
+      pendingCensusScrollAction = null;
+      activeCensusScrollSurface = null;
+      return refused('census_scroll_surface_changed');
+    }
+    return null;
   }
 
   function renderSignature(candidates) {
@@ -73,16 +126,19 @@
     };
   }
 
-  function probeCensusScroll() {
+  function probeCensusScroll(message) {
     if (!censusCardObserver || !censusScroll) {
       return refused('unsupported_census_scroll_surface');
     }
     const snapshot = censusSnapshot();
+    const invalidSurface = validateCensusRunSurface(message, snapshot);
+    if (invalidSurface) return invalidSurface;
     return {
       status: 'ready',
       scrollMetrics: snapshot.scrollMetrics,
       candidateNodeCount: snapshot.extracted.candidateNodeCount,
       renderSignature: snapshot.renderSignature,
+      surfaceBinding: publicSurfaceBinding(activeCensusScrollSurface),
     };
   }
 
@@ -103,7 +159,18 @@
         ? {}
         : { bottomTolerance: message.bottomTolerance }),
     });
-    return { status: 'ready', checkpoint };
+    const exactIdentity = surfaceIdentity();
+    activeCensusScrollSurface = Object.freeze({
+      runId: checkpoint.runId,
+      documentNonce: censusDocumentNonce,
+      routeIdentity: safeRouteIdentity(exactIdentity),
+      exactIdentity,
+    });
+    return {
+      status: 'ready',
+      checkpoint,
+      surfaceBinding: publicSurfaceBinding(activeCensusScrollSurface),
+    };
   }
 
   function advanceCensusScroll(message) {
@@ -114,6 +181,11 @@
       return refused('census_scroll_action_pending');
     }
     const snapshot = censusSnapshot();
+    const invalidSurface = validateCensusRunSurface({
+      ...message,
+      runId: message.checkpoint?.runId,
+    }, snapshot);
+    if (invalidSurface) return invalidSurface;
     const candidates = censusCardObserver.buildCardCandidates({
       runId: message.checkpoint?.runId,
       round: (message.checkpoint?.round ?? 0) + 1,
@@ -135,6 +207,7 @@
           scrollMetrics: snapshot.scrollMetrics,
           renderSignature: snapshot.renderSignature,
           surfaceIdentity: snapshot.surfaceIdentity,
+          surfaceBinding: publicSurfaceBinding(activeCensusScrollSurface),
         }
       : null;
     return result;
@@ -153,6 +226,7 @@
       message.runId !== pending.runId
       || message.round !== pending.round
       || action.scrollTop !== pending.scrollTop
+      || !sameSurfaceBinding(message.surfaceBinding, pending.surfaceBinding)
     ) return refused('census_scroll_action_mismatch');
 
     const current = censusSnapshot();
@@ -190,7 +264,7 @@
         return false;
       }
       if (message?.type === 'vault:census-scroll:probe') {
-        sendResponse(probeCensusScroll());
+        sendResponse(probeCensusScroll(message));
         return false;
       }
       if (message?.type === 'vault:census-scroll:advance') {

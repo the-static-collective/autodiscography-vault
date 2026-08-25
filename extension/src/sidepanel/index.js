@@ -33,6 +33,7 @@ let censusScrollTimer = null;
 let censusScrollCheckpoint = null;
 let censusScrollTabId = null;
 let censusScrollGeneration = 0;
+let censusScrollSurfaceBinding = null;
 
 function appendField(article, label, value) {
   const row = document.createElement('p');
@@ -99,6 +100,7 @@ function stopCensusScroll(status) {
   censusScrollTimer = null;
   censusScrollCheckpoint = null;
   censusScrollTabId = null;
+  censusScrollSurfaceBinding = null;
   setCensusScrollActive(false);
   if (status) censusScrollStatus.textContent = status;
 }
@@ -168,7 +170,33 @@ async function persistCensusRound(roundResult) {
   return segment;
 }
 
-async function applyCensusScrollAction({ action, runId, round, tabId }) {
+function validatedCensusSurfaceBinding(binding) {
+  if (
+    !binding
+    || typeof binding !== 'object'
+    || typeof binding.documentNonce !== 'string'
+    || !/^[a-f0-9]{32}$/.test(binding.documentNonce)
+    || typeof binding.routeIdentity !== 'string'
+    || binding.routeIdentity.length > 2048
+  ) throw new Error('invalid census surface binding');
+  const route = new URL(binding.routeIdentity);
+  if (
+    route.protocol !== 'https:'
+    || !['suno.com', 'www.suno.com'].includes(route.hostname)
+    || route.username
+    || route.password
+    || route.search
+    || route.hash
+    || `${route.origin}${route.pathname}` !== binding.routeIdentity
+  ) throw new Error('invalid census surface binding');
+  return Object.freeze({
+    documentNonce: binding.documentNonce,
+    routeIdentity: binding.routeIdentity,
+  });
+}
+
+async function applyCensusScrollAction({ action, runId, round, tabId, surfaceBinding }) {
+  const safeSurfaceBinding = validatedCensusSurfaceBinding(surfaceBinding);
   if (
     !Number.isSafeInteger(tabId)
     || tabId < 0
@@ -185,11 +213,13 @@ async function applyCensusScrollAction({ action, runId, round, tabId }) {
     runId,
     round,
     action,
+    surfaceBinding: safeSurfaceBinding,
   });
   if (applied?.status !== 'applied') throw new Error('census scroll action was not applied');
 }
 
-function validatedSettleProbe(probe, requiredTop) {
+function validatedSettleProbe(probe, requiredTop, surfaceBinding) {
+  const safeProbeBinding = validatedCensusSurfaceBinding(probe?.surfaceBinding);
   if (
     probe?.status !== 'ready'
     || !Number.isSafeInteger(probe.candidateNodeCount)
@@ -198,6 +228,10 @@ function validatedSettleProbe(probe, requiredTop) {
     || !/^[a-f0-9]{8}$/.test(probe.renderSignature)
     || !probe.scrollMetrics
   ) throw new Error('invalid census scroll settle probe');
+  if (
+    safeProbeBinding.documentNonce !== surfaceBinding.documentNonce
+    || safeProbeBinding.routeIdentity !== surfaceBinding.routeIdentity
+  ) throw new Error('census scroll surface changed while settling');
   const { scrollTop, viewportHeight, scrollHeight } = probe.scrollMetrics;
   for (const value of [scrollTop, viewportHeight, scrollHeight]) {
     if (!Number.isFinite(value) || value < 0) throw new Error('invalid census scroll settle metrics');
@@ -217,18 +251,26 @@ function validatedSettleProbe(probe, requiredTop) {
 async function waitForCensusScrollSettled({
   generation,
   tabId,
+  runId,
+  surfaceBinding,
   requiredTop = null,
   minWaitMs = 600,
   maxWaitMs = 10_000,
   stableProbes = 3,
 } = {}) {
+  const safeSurfaceBinding = validatedCensusSurfaceBinding(surfaceBinding);
+  if (typeof runId !== 'string' || !runId) throw new Error('invalid census run binding');
   const startedAt = Date.now();
   let priorSignature = null;
   let consecutiveStableProbes = 0;
   while (isCurrentCensusScroll(generation)) {
-    const probe = await chrome.tabs.sendMessage(tabId, { type: 'vault:census-scroll:probe' });
+    const probe = await chrome.tabs.sendMessage(tabId, {
+      type: 'vault:census-scroll:probe',
+      runId,
+      surfaceBinding: safeSurfaceBinding,
+    });
     if (!isCurrentCensusScroll(generation)) return false;
-    const validated = validatedSettleProbe(probe, requiredTop);
+    const validated = validatedSettleProbe(probe, requiredTop, safeSurfaceBinding);
     if (validated.atRequiredTop && validated.signature === priorSignature) {
       consecutiveStableProbes += 1;
     } else {
@@ -245,15 +287,22 @@ async function waitForCensusScrollSettled({
 }
 
 async function advanceCensusScroll() {
-  if (!censusScrollActive || censusScrollTabId === null || !censusScrollCheckpoint) return;
+  if (
+    !censusScrollActive
+    || censusScrollTabId === null
+    || !censusScrollCheckpoint
+    || !censusScrollSurfaceBinding
+  ) return;
   const generation = censusScrollGeneration;
   const tabId = censusScrollTabId;
   const checkpoint = censusScrollCheckpoint;
+  const surfaceBinding = censusScrollSurfaceBinding;
   try {
     const result = await chrome.tabs.sendMessage(tabId, {
       type: 'vault:census-scroll:advance',
       checkpoint,
       observedAt: new Date().toISOString(),
+      surfaceBinding,
     });
     if (!isCurrentCensusScroll(generation)) return;
     if (!result || result.status === 'refused') {
@@ -285,6 +334,7 @@ async function advanceCensusScroll() {
       runId: segment.runId,
       round: segment.round,
       tabId,
+      surfaceBinding,
     });
     if (!isCurrentCensusScroll(generation)) return;
     censusScrollStatus.textContent += ' Waiting for the new rendered viewport to settle…';
@@ -294,7 +344,13 @@ async function advanceCensusScroll() {
         - segment.checkpoint.scrollMetrics.viewportHeight,
     );
     const requiredTop = Math.min(result.action.scrollTop, maximumTop);
-    const settled = await waitForCensusScrollSettled({ generation, tabId, requiredTop });
+    const settled = await waitForCensusScrollSettled({
+      generation,
+      tabId,
+      runId: segment.runId,
+      surfaceBinding,
+      requiredTop,
+    });
     if (!settled || !isCurrentCensusScroll(generation)) return;
     censusScrollTimer = setTimeout(advanceCensusScroll, 0);
   } catch {
@@ -370,17 +426,21 @@ async function startCensusScroll() {
       );
       return;
     }
+    const surfaceBinding = validatedCensusSurfaceBinding(created.surfaceBinding);
 
     censusScrollStatus.textContent = 'Waiting for reset-to-top cards and scroll metrics to settle…';
     const settled = await waitForCensusScrollSettled({
       generation,
       tabId: tab.id,
+      runId: created.checkpoint.runId,
+      surfaceBinding,
       requiredTop: 0,
       minWaitMs: 1400,
     });
     if (!settled || !isCurrentCensusScroll(generation)) return;
     censusScrollCheckpoint = created.checkpoint;
     censusScrollTabId = tab.id;
+    censusScrollSurfaceBinding = surfaceBinding;
     censusScrollStatus.textContent = resumeCheckpoint
       ? `Resuming run ${resumeCheckpoint.runId} from saved round ${resumeCheckpoint.round}; replay starts at the top.`
       : `Started run ${created.checkpoint.runId}; each viewport is saved before the next round.`;
