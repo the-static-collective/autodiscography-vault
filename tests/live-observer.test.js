@@ -178,6 +178,25 @@ test('aggregation happens before the 25-track cap', () => {
   assert.equal(extracted.candidates[0].title, 'Track One Enriched');
 });
 
+test('census extraction preserves every currently rendered grouped candidate before auto-scroll', () => {
+  const observer = loadObserver();
+  const nodes = Array.from({ length: 40 }, (_, index) => element({
+    tagName: 'A',
+    attributes: {
+      href: `https://suno.com/song/census-${index + 1}`,
+      'data-song-id': `census-${index + 1}`,
+    },
+    textContent: `Census ${index + 1}`,
+  }));
+
+  const pilot = observer.extractSunoCandidates({ querySelectorAll: () => nodes });
+  const census = observer.extractSunoCensusCandidates({ querySelectorAll: () => nodes });
+  assert.equal(pilot.candidates.length, 25);
+  assert.equal(census.candidateNodeCount, 40);
+  assert.equal(census.candidates.length, 40);
+  assert.equal(census.candidates[39].providerTrackId, 'census-40');
+});
+
 test('WAV is proposed and explicit audio/wav surfaces classify as audio_wav', () => {
   const observer = loadObserver();
   const wavUrl = 'https://cdn.example.test/track-wav.wav?sig=ephemeral-secret#download';
