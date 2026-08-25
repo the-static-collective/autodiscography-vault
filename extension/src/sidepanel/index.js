@@ -1,4 +1,9 @@
 import { listSyntheticTracks } from '../provider/suno/fixture-adapter.js';
+import {
+  buildCensusScrollSegment,
+  parseCensusScrollSegment,
+  serializeCensusScrollSegment,
+} from './census-scroll-segment.js';
 import { formatPowerShellAdmitCommand } from './powershell-handoff.js';
 import { bindCreatedWav, isWavDownloadItem } from './wav-witness.js';
 
@@ -12,6 +17,10 @@ const transportStatus = document.querySelector('#transport-status');
 const vaultRootInput = document.querySelector('#vault-root');
 const admitCommand = document.querySelector('#admit-command');
 const copyAdmitCommand = document.querySelector('#copy-admit-command');
+const censusScrollStart = document.querySelector('#census-scroll-start');
+const censusScrollStop = document.querySelector('#census-scroll-stop');
+const censusScrollResume = document.querySelector('#census-scroll-resume');
+const censusScrollStatus = document.querySelector('#census-scroll-status');
 
 let latestObservation = null;
 let transportEnabled = false;
@@ -19,6 +28,10 @@ let selectedProviderTrackId = null;
 let activeDownload = null;
 let armedWavWitness = null;
 let completedStaging = null;
+let censusScrollActive = false;
+let censusScrollTimer = null;
+let censusScrollCheckpoint = null;
+let censusScrollTabId = null;
 
 function appendField(article, label, value) {
   const row = document.createElement('p');
@@ -62,6 +75,176 @@ function runId() {
   crypto.getRandomValues(random);
   const suffix = Array.from(random, byte => byte.toString(16).padStart(2, '0')).join('');
   return `suno-b2-${timestamp}-${suffix}`;
+}
+
+function censusRunId() {
+  const timestamp = new Date().toISOString().replace(/[-:.]/g, '');
+  const random = new Uint8Array(4);
+  crypto.getRandomValues(random);
+  const suffix = Array.from(random, byte => byte.toString(16).padStart(2, '0')).join('');
+  return `suno-census-${timestamp}-${suffix}`;
+}
+
+function setCensusScrollActive(active) {
+  censusScrollActive = active;
+  censusScrollStart.disabled = active;
+  censusScrollStop.disabled = !active;
+  censusScrollResume.disabled = active;
+}
+
+function stopCensusScroll(status) {
+  if (censusScrollTimer !== null) clearTimeout(censusScrollTimer);
+  censusScrollTimer = null;
+  setCensusScrollActive(false);
+  if (status) censusScrollStatus.textContent = status;
+}
+
+function safeCensusDownloadName(checkpoint) {
+  const safeRunId = safePathSegment(checkpoint.runId, 'unknown-census-run');
+  const round = String(checkpoint.round).padStart(6, '0');
+  return `Autodiscography-Vault/${safeRunId}/census/round-${round}.json`;
+}
+
+async function waitForDownloadCompletion(downloadId) {
+  const terminalState = async () => {
+    const [item] = await chrome.downloads.search({ id: downloadId });
+    return item?.state ?? null;
+  };
+  const initial = await terminalState();
+  if (initial === 'complete') return;
+  if (initial === 'interrupted') throw new Error('segment download interrupted');
+
+  await new Promise((resolve, reject) => {
+    const finish = (error) => {
+      chrome.downloads.onChanged.removeListener(listener);
+      if (error) reject(error);
+      else resolve();
+    };
+    const listener = (delta) => {
+      if (delta?.id !== downloadId || !delta.state?.current) return;
+      if (delta.state.current === 'complete') finish();
+      else if (delta.state.current === 'interrupted') finish(new Error('segment download interrupted'));
+    };
+    chrome.downloads.onChanged.addListener(listener);
+    terminalState()
+      .then((state) => {
+        if (state === 'complete') finish();
+        else if (state === 'interrupted') finish(new Error('segment download interrupted'));
+      })
+      .catch(() => finish(new Error('segment download state unavailable')));
+  });
+}
+
+async function persistCensusRound(roundResult) {
+  const segment = buildCensusScrollSegment(roundResult);
+  const body = serializeCensusScrollSegment(segment);
+  const url = URL.createObjectURL(new Blob([body], { type: 'application/json' }));
+  try {
+    const downloadId = await chrome.downloads.download({
+      url,
+      filename: safeCensusDownloadName(segment.checkpoint),
+      conflictAction: 'uniquify',
+      saveAs: false,
+    });
+    await waitForDownloadCompletion(downloadId);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+  return segment;
+}
+
+async function advanceCensusScroll() {
+  if (!censusScrollActive || censusScrollTabId === null || !censusScrollCheckpoint) return;
+  try {
+    const result = await chrome.tabs.sendMessage(censusScrollTabId, {
+      type: 'vault:census-scroll:advance',
+      checkpoint: censusScrollCheckpoint,
+      observedAt: new Date().toISOString(),
+    });
+    if (!result || result.status === 'refused') {
+      stopCensusScroll(`Census refused: ${result?.reasonCode ?? 'unsupported_census_scroll_surface'}.`);
+      return;
+    }
+
+    const segment = await persistCensusRound(result);
+    censusScrollCheckpoint = segment.checkpoint;
+    censusScrollStatus.textContent = [
+      `Saved round ${segment.round}.`,
+      `${segment.checkpoint.seenStableIds.length} stable IDs observed;`,
+      `${segment.checkpoint.emittedCount} raw card observations preserved.`,
+    ].join(' ');
+
+    if (segment.status === 'ui_exhausted') {
+      stopCensusScroll(
+        `${censusScrollStatus.textContent} ui_exhausted is a terminal UI witness, not provider completeness.`,
+      );
+      return;
+    }
+    censusScrollTimer = setTimeout(advanceCensusScroll, 1400);
+  } catch {
+    stopCensusScroll(
+      'Census paused safely. Resume from the last completed round file; the unsaved viewport will be replayed.',
+    );
+  }
+}
+
+async function startCensusScroll() {
+  stopCensusScroll();
+  censusScrollStatus.textContent = 'Preparing explicit local round-file persistence…';
+
+  if (
+    !globalThis.chrome?.permissions?.request
+    || !globalThis.chrome?.tabs?.query
+    || !globalThis.chrome?.tabs?.sendMessage
+    || !globalThis.chrome?.downloads?.download
+    || !globalThis.chrome?.downloads?.search
+    || !globalThis.chrome?.downloads?.onChanged
+  ) {
+    censusScrollStatus.textContent = 'Census unavailable: required local browser capabilities are absent.';
+    return;
+  }
+
+  try {
+    const granted = await chrome.permissions.request({ permissions: ['downloads'] });
+    if (!granted) {
+      censusScrollStatus.textContent = 'Census refused: downloads permission is required to preserve each round before continuing.';
+      return;
+    }
+
+    let resumeCheckpoint = null;
+    const resumeFile = censusScrollResume.files?.[0];
+    if (resumeFile) {
+      const segment = parseCensusScrollSegment(await resumeFile.text());
+      if (segment.status === 'ui_exhausted') {
+        censusScrollStatus.textContent = 'Resume refused: that segment already records ui_exhausted.';
+        return;
+      }
+      resumeCheckpoint = segment.checkpoint;
+    }
+
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id) throw new Error('active tab unavailable');
+    const created = await chrome.tabs.sendMessage(tab.id, {
+      type: 'vault:census-scroll:create',
+      ...(resumeCheckpoint
+        ? { checkpoint: resumeCheckpoint }
+        : { runId: censusRunId(), observedAt: new Date().toISOString() }),
+    });
+    if (!created || created.status !== 'ready' || !created.checkpoint) {
+      censusScrollStatus.textContent = `Census refused: ${created?.reasonCode ?? 'unsupported_census_scroll_surface'}.`;
+      return;
+    }
+
+    censusScrollCheckpoint = created.checkpoint;
+    censusScrollTabId = tab.id;
+    setCensusScrollActive(true);
+    censusScrollStatus.textContent = resumeCheckpoint
+      ? `Resuming run ${resumeCheckpoint.runId} from saved round ${resumeCheckpoint.round}; replay starts at the top.`
+      : `Started run ${created.checkpoint.runId}; each viewport is saved before the next round.`;
+    await advanceCensusScroll();
+  } catch {
+    stopCensusScroll('Census refused or paused before a new durable round was recorded.');
+  }
 }
 
 function extensionForAsset(asset) {
@@ -430,6 +613,10 @@ async function copyAdmissionCommand() {
 
 refreshLive.addEventListener('click', requestLiveObservation);
 enableTransport.addEventListener('click', requestTransportPermission);
+censusScrollStart.addEventListener('click', startCensusScroll);
+censusScrollStop.addEventListener('click', () => {
+  stopCensusScroll('Census stopped. Resume from the last completed round file; no unsaved round is claimed.');
+});
 vaultRootInput.addEventListener('input', renderAdmissionHandoff);
 copyAdmitCommand.addEventListener('click', copyAdmissionCommand);
 renderAdmissionHandoff();

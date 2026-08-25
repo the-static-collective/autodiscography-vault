@@ -409,7 +409,13 @@
     });
     const action = status === 'ui_exhausted'
       ? Object.freeze({ kind: 'stop', reasonCode: 'ui_exhausted' })
-      : Object.freeze({ kind: 'scroll_to', scrollTop: currentMetrics.scrollHeight });
+      : Object.freeze({
+          kind: 'scroll_to',
+          scrollTop: Math.min(
+            currentMetrics.scrollHeight,
+            currentMetrics.scrollTop + Math.max(currentMetrics.viewportHeight * 0.8, 1),
+          ),
+        });
 
     return Object.freeze({
       schema: ROUND_SCHEMA,

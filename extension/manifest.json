@@ -22,6 +22,8 @@
       ],
       "js": [
         "src/provider/suno/live-observer.js",
+        "src/provider/suno/census-card-observer.js",
+        "src/provider/suno/census-scroll.js",
         "src/provider/suno/content-script.js"
       ],
       "run_at": "document_idle"
