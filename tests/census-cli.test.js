@@ -13,7 +13,12 @@ function observation() {
     schema: 'autodiscography-vault-observation/v1',
     provider: 'suno',
     observedAt: '2026-08-24T21:30:00.000Z',
-    source: { kind: 'provider_export', locator: 'synthetic-cli' },
+    source: {
+      kind: 'provider_export',
+      locator: 'synthetic-cli',
+      adapter: 'synthetic-provider-export/v1',
+      surface: 'provider_export',
+    },
     payload: {
       id: 'track-cli',
       created_at: '2024-01-01T00:00:00.000Z',

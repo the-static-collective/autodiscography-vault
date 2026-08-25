@@ -22,6 +22,8 @@ function observation(index, overrides = {}) {
     source: {
       kind: 'provider_export',
       locator: `synthetic-page:${Math.floor(index / 50)}`,
+      adapter: 'synthetic-provider-export/v1',
+      surface: 'provider_export',
     },
     payload: {
       id: `track-${String(index).padStart(5, '0')}`,
@@ -267,6 +269,8 @@ test('capability URL hidden in a generic source locator is refused before raw ad
     source: {
       kind: 'ordinary_user_surface',
       locator: 'https://cdn.example.test/object?X-Amz-Credential=temp&X-Amz-Signature=secret',
+      adapter: 'synthetic-provider-export/v1',
+      surface: 'provider_export',
     },
   });
   await writeFile(inputPath, packBytes([unsafe]));

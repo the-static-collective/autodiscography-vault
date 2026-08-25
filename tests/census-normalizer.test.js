@@ -21,6 +21,8 @@ function observation(overrides = {}) {
     source: {
       kind: 'provider_export',
       locator: 'suno-export:page-1',
+      adapter: 'synthetic-provider-export/v1',
+      surface: 'provider_export',
     },
     payload: {
       id: 'track-alpha',
@@ -63,6 +65,12 @@ test('exact provider prompt provenance remains distinct from normalization and o
   assert.equal(normalized.normalizer, 'census-v1');
   assert.equal(normalized.observedAt, '2026-08-24T21:30:00.000Z');
   assert.deepEqual(normalized.rawProvenance, provenance);
+  assert.deepEqual(normalized.source, {
+    kind: 'provider_export',
+    locator: 'suno-export:page-1',
+    adapter: 'synthetic-provider-export/v1',
+    surface: 'provider_export',
+  });
 
   assert.deepEqual(normalized.fields.providerTrackId, {
     state: 'observed',
@@ -158,6 +166,29 @@ test('missing evidence does not silently become not-observed', () => {
   assert.throws(
     () => normalizeCensusObservation(input, provenance),
     /missing evidence state: lyricGenerationPromptRaw/,
+  );
+});
+
+test('capture provenance requires a versioned adapter and explicit surface profile', () => {
+  const missingAdapter = observation();
+  delete missingAdapter.source.adapter;
+  assert.throws(
+    () => normalizeCensusObservation(missingAdapter, provenance),
+    /missing source.adapter/,
+  );
+
+  const missingSurface = observation();
+  delete missingSurface.source.surface;
+  assert.throws(
+    () => normalizeCensusObservation(missingSurface, provenance),
+    /missing source.surface/,
+  );
+
+  const unversioned = observation();
+  unversioned.source.adapter = 'helpful-guesser';
+  assert.throws(
+    () => normalizeCensusObservation(unversioned, provenance),
+    /source.adapter must be explicitly versioned/,
   );
 });
 
