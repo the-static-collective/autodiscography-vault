@@ -7,6 +7,7 @@ import {
   mkdir,
   readFile,
   readdir,
+  stat,
   writeFile,
 } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -88,6 +89,9 @@ test('crash halfway through 20k observations resumes without duplicates or raw m
   const rawPath = join(vaultRoot, 'raw', 'observations', `${sourceSha256}.ndjson`);
   const partialPath = join(vaultRoot, 'normalized', 'census-v1', `${sourceSha256}.ndjson.partial`);
   assert.deepEqual(await readFile(rawPath), bytes, 'raw source must be fully preserved before normalization completes');
+  if (process.platform !== 'win32') {
+    assert.equal((await stat(rawPath)).mode & 0o077, 0, 'raw evidence must not be group/world readable');
+  }
 
   // Model a crash after another projection line reached disk but before its
   // checkpoint. Restart must truncate disposable projection bytes back to the
@@ -249,6 +253,24 @@ test('credential-bearing durable fields are refused before raw admission', async
   await assert.rejects(
     () => ingestCensusPack({ inputPath, vaultRoot }),
     /durable credential field refused/,
+  );
+  const rawDir = join(vaultRoot, 'raw', 'observations');
+  await assert.rejects(() => readdir(rawDir), error => error?.code === 'ENOENT');
+});
+
+test('capability URL hidden in a generic source locator is refused before raw admission', async () => {
+  const { vaultRoot, inputPath } = await fixture('census-capability-url');
+  const unsafe = observation(1, {
+    source: {
+      kind: 'ordinary_user_surface',
+      locator: 'https://cdn.example.test/object?X-Amz-Credential=temp&X-Amz-Signature=secret',
+    },
+  });
+  await writeFile(inputPath, packBytes([unsafe]));
+
+  await assert.rejects(
+    () => ingestCensusPack({ inputPath, vaultRoot }),
+    /durable capability URL refused/,
   );
   const rawDir = join(vaultRoot, 'raw', 'observations');
   await assert.rejects(() => readdir(rawDir), error => error?.code === 'ENOENT');
