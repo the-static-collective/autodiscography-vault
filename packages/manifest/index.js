@@ -18,7 +18,9 @@ export function buildHandoffManifest({ runId, receipts }) {
       observedAt: receipt.observedAt,
       state: receipt.state,
       reasonCode: receipt.reasonCode ?? null,
-      requestDescriptorSha256: receipt.requestDescriptorSha256 ?? null,
+      ...(receipt.assetRole === 'audio_wav' && receipt.requestDescriptorSha256 === undefined
+        ? {}
+        : { requestDescriptorSha256: receipt.requestDescriptorSha256 ?? null }),
       asset: Object.freeze({
         role: receipt.assetRole,
         path: receipt.sourceRelativePath ?? null,
