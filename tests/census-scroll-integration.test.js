@@ -83,6 +83,12 @@ test('content-script observation is side-effect free until an explicit post-pers
     URL,
     location: { origin: 'https://suno.com', href: 'https://suno.com/library' },
     document: { scrollingElement: scroller, documentElement: scroller },
+    crypto: {
+      getRandomValues(values) {
+        values.fill(7);
+        return values;
+      },
+    },
     chrome: {
       runtime: {
         onMessage: {
@@ -117,17 +123,33 @@ test('content-script observation is side-effect free until an explicit post-pers
     listener(message, {}, value => { response = value; });
     return response;
   };
-  const probe = send({ type: 'vault:census-scroll:probe' });
+  const created = send({
+    type: 'vault:census-scroll:create',
+    checkpoint: { runId: 'runtime-handshake', round: 0 },
+  });
+  assert.equal(created.status, 'ready');
+  assert.deepEqual(created.checkpoint, { runId: 'runtime-handshake', round: 0 });
+  assert.equal(typeof created.surfaceBinding?.documentNonce, 'string');
+  assert.equal(created.surfaceBinding?.routeIdentity, 'https://suno.com/library');
+  scrollCalls.length = 0;
+
+  const probe = send({
+    type: 'vault:census-scroll:probe',
+    runId: 'runtime-handshake',
+    surfaceBinding: created.surfaceBinding,
+  });
   assert.equal(probe.status, 'ready');
   assert.equal(probe.candidateNodeCount, 0);
   assert.match(probe.renderSignature, /^[a-f0-9]{8}$/);
   assert.equal(probe.scrollMetrics.scrollTop, 0);
+  assert.deepEqual(probe.surfaceBinding, created.surfaceBinding);
 
   const freshApply = send({
     type: 'vault:census-scroll:apply',
     runId: round.runId,
     round: round.round,
     action: round.action,
+    surfaceBinding: created.surfaceBinding,
   });
   assert.equal(freshApply.status, 'refused', 'a fresh document has no observed action to apply');
   assert.deepEqual(scrollCalls, []);
@@ -136,6 +158,7 @@ test('content-script observation is side-effect free until an explicit post-pers
     type: 'vault:census-scroll:advance',
     checkpoint: { runId: 'runtime-handshake', round: 0 },
     observedAt: round.observedAt,
+    surfaceBinding: created.surfaceBinding,
   });
   assert.equal(observed, round);
   assert.deepEqual(scrollCalls, [], 'advance must only observe and propose an action');
@@ -145,6 +168,7 @@ test('content-script observation is side-effect free until an explicit post-pers
     runId: round.runId,
     round: round.round + 1,
     action: round.action,
+    surfaceBinding: created.surfaceBinding,
   });
   assert.equal(mismatched.status, 'refused');
   assert.deepEqual(scrollCalls, [], 'a mismatched run/round cannot consume the pending action');
@@ -154,6 +178,7 @@ test('content-script observation is side-effect free until an explicit post-pers
     runId: round.runId,
     round: round.round,
     action: round.action,
+    surfaceBinding: created.surfaceBinding,
   }).status, 'applied');
   assert.equal(scrollCalls.length, 1);
   assert.equal(scrollCalls[0].top, 640);
@@ -163,6 +188,7 @@ test('content-script observation is side-effect free until an explicit post-pers
     type: 'vault:census-scroll:advance',
     checkpoint: { runId: 'runtime-handshake', round: 0 },
     observedAt: round.observedAt,
+    surfaceBinding: created.surfaceBinding,
   });
   scroller.clientHeight = 700;
   const resized = send({
@@ -170,6 +196,7 @@ test('content-script observation is side-effect free until an explicit post-pers
     runId: round.runId,
     round: round.round,
     action: round.action,
+    surfaceBinding: created.surfaceBinding,
   });
   assert.equal(resized.status, 'refused', 'viewport drift invalidates an observed pending action');
   assert.equal(scrollCalls.length, 1);
@@ -179,6 +206,7 @@ test('content-script observation is side-effect free until an explicit post-pers
     type: 'vault:census-scroll:advance',
     checkpoint: { runId: 'runtime-handshake', round: 0 },
     observedAt: round.observedAt,
+    surfaceBinding: created.surfaceBinding,
   });
   context.location.href = 'https://suno.com/create';
   const navigated = send({
@@ -186,9 +214,29 @@ test('content-script observation is side-effect free until an explicit post-pers
     runId: round.runId,
     round: round.round,
     action: round.action,
+    surfaceBinding: created.surfaceBinding,
   });
   assert.equal(navigated.status, 'refused', 'navigation invalidates an observed pending action');
   assert.equal(scrollCalls.length, 1, 'a stale action cannot move a different Suno surface');
+
+  const driftProbes = Array.from({ length: 3 }, () => send({
+    type: 'vault:census-scroll:probe',
+    runId: 'runtime-handshake',
+    surfaceBinding: created.surfaceBinding,
+  }));
+  assert.deepEqual(
+    driftProbes.map(value => value.status),
+    ['refused', 'refused', 'refused'],
+    'a navigated surface must never become stable for the original run',
+  );
+  const secondSurfaceAdvance = send({
+    type: 'vault:census-scroll:advance',
+    checkpoint: { runId: 'runtime-handshake', round: 1 },
+    observedAt: '2026-08-25T04:00:02.000Z',
+    surfaceBinding: created.surfaceBinding,
+  });
+  assert.equal(secondSurfaceAdvance.status, 'refused',
+    'a run cannot record candidates after migrating to a different route');
 });
 
 test('side panel exposes operator-started resumable census and persists every round before advancing', async () => {
@@ -201,6 +249,7 @@ test('side panel exposes operator-started resumable census and persists every ro
   assert.match(panel, /vault:census-scroll:create/);
   assert.match(panel, /vault:census-scroll:advance/);
   assert.match(panel, /vault:census-scroll:apply/);
+  assert.match(panel, /let censusScrollSurfaceBinding = null/);
   assert.match(panel, /buildCensusScrollSegment/);
   assert.match(panel, /chrome\.downloads\.download/);
   assert.match(panel, /new Blob/);
@@ -247,6 +296,7 @@ test('side panel exposes operator-started resumable census and persists every ro
   assert.match(settlePhase, /maxWaitMs/);
   assert.match(settlePhase, /requiredTop/);
   assert.match(settlePhase, /vault:census-scroll:probe/);
+  assert.match(settlePhase, /surfaceBinding/);
   assert.equal(/chrome\.storage|localStorage|sessionStorage/.test(panel), false);
   assert.equal(/provider_complete/.test(`${html}\n${panel}`), false);
 });
