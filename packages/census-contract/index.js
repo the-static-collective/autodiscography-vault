@@ -1,6 +1,8 @@
 const CANONICAL_UTC_ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+const EXPLICIT_OFFSET_RFC3339 = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?(Z|[+-]\d{2}:\d{2})$/;
 const SHA256_HEX = /^[a-f0-9]{64}$/;
 const REASON_CODE = /^[a-z0-9][a-z0-9_-]{0,127}$/;
+const DURABLE_CREDENTIAL_VALUE = /\bbearer\s+[A-Za-z0-9._~+/=-]+/i;
 const REQUIRED_EVIDENCE = Object.freeze([
   'providerTrackId',
   'providerCreatedAtRaw',
@@ -30,15 +32,24 @@ const FORBIDDEN_DURABLE_KEYS = new Set([
   'sessiontoken',
   'apikey',
   'authheader',
+  'authorizationheader',
+  'authtoken',
+  'csrftoken',
+  'idtoken',
+  'jwt',
+  'sessionid',
 ]);
 const CAPABILITY_QUERY_KEYS = new Set([
   'auth',
   'authorization',
   'cookie',
   'credential',
+  'expires',
   'key',
+  'keypairid',
   'policy',
   'session',
+  'sig',
   'signature',
   'token',
 ]);
@@ -83,12 +94,21 @@ function isCapabilityUrl(value) {
   if (url.username || url.password || url.hash) return true;
   for (const key of url.searchParams.keys()) {
     const normalized = normalizeKey(key);
-    if (normalized.startsWith('xamz') || CAPABILITY_QUERY_KEYS.has(normalized)) return true;
+    if (
+      normalized.startsWith('xamz')
+      || normalized.startsWith('xgoog')
+      || CAPABILITY_QUERY_KEYS.has(normalized)
+    ) return true;
   }
   return false;
 }
 
 export function assertDurableObservationSafe(value, seen = new Set()) {
+  if (typeof value === 'string') {
+    if (DURABLE_CREDENTIAL_VALUE.test(value)) throw new Error('durable credential value refused');
+    if (isCapabilityUrl(value)) throw new Error('durable capability URL refused: value');
+    return true;
+  }
   if (value === null || typeof value !== 'object') return true;
   if (seen.has(value)) return true;
   seen.add(value);
@@ -124,7 +144,13 @@ function resolvePointer(root, pointer) {
   return { found: true, value };
 }
 
-function normalizeEvidence(name, evidence, payload) {
+function assertEvidenceKeys(name, evidence, allowed) {
+  for (const key of Object.keys(evidence)) {
+    if (!allowed.has(key)) throw new Error(`unknown evidence field: ${name}.${key}`);
+  }
+}
+
+function normalizeEvidence(name, evidence, payload, { observedType } = {}) {
   if (!isObject(evidence)) throw new Error(`missing evidence state: ${name}`);
   const state = evidence.state;
   if (!FIELD_STATES.includes(state) || ['derived', 'normalization_failed'].includes(state)) {
@@ -132,25 +158,90 @@ function normalizeEvidence(name, evidence, payload) {
   }
 
   if (POINTER_STATES.has(state)) {
+    if ('value' in evidence) throw new Error(`pointer evidence cannot carry inline value: ${name}`);
+    assertEvidenceKeys(name, evidence, new Set(['state', 'pointer']));
     const pointer = requireString(evidence.pointer, `${name} pointer`);
     const resolved = resolvePointer(payload, pointer);
     if (!resolved.found) throw new Error(`observed pointer does not resolve: ${name}`);
     if (state === 'known_null' && resolved.value !== null) {
       throw new Error(`known_null pointer is not null: ${name}`);
     }
-    if (resolved.value === null) {
-      return Object.freeze({ state: 'known_null', sourcePointer: pointer });
+    if (state === 'observed' && resolved.value === null) {
+      throw new Error(`observed pointer resolved null: ${name}; use known_null`);
     }
+    if (observedType && state === 'observed' && typeof resolved.value !== observedType) {
+      throw new Error(`${name} observed value must be a ${observedType}`);
+    }
+    if (state === 'known_null') return Object.freeze({ state: 'known_null', sourcePointer: pointer });
     return Object.freeze({ state: 'observed', value: resolved.value, sourcePointer: pointer });
   }
 
   if (!ABSENCE_STATES.has(state)) throw new Error(`invalid evidence state: ${name}`);
+  const historical = state === 'historically_observed_now_missing';
+  assertEvidenceKeys(
+    name,
+    evidence,
+    new Set(historical ? ['state', 'reasonCode', 'priorRawRecordSha256'] : ['state', 'reasonCode']),
+  );
   const reasonCode = requireString(evidence.reasonCode, `${name} reasonCode`);
   if (!REASON_CODE.test(reasonCode)) throw new Error(`invalid reasonCode: ${name}`);
-  if ('pointer' in evidence || 'value' in evidence) {
-    throw new Error(`absence evidence cannot carry value: ${name}`);
+  if (historical) {
+    if (!SHA256_HEX.test(evidence.priorRawRecordSha256 ?? '')) {
+      throw new Error(`historically missing evidence requires priorRawRecordSha256: ${name}`);
+    }
+    return Object.freeze({ state, reasonCode, priorRawRecordSha256: evidence.priorRawRecordSha256 });
   }
   return Object.freeze({ state, reasonCode });
+}
+
+function leapYear(year) {
+  return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+}
+
+function daysInMonth(year, month) {
+  return [31, leapYear(year) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1] ?? 0;
+}
+
+function normalizeExplicitOffsetTimestamp(value) {
+  const match = EXPLICIT_OFFSET_RFC3339.exec(value);
+  if (!match) return null;
+  const [, yearRaw, monthRaw, dayRaw, hourRaw, minuteRaw, secondRaw, fractionRaw = '', offsetRaw] = match;
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  const day = Number(dayRaw);
+  const hour = Number(hourRaw);
+  const minute = Number(minuteRaw);
+  const second = Number(secondRaw);
+  if (
+    year < 1
+    || month < 1
+    || month > 12
+    || day < 1
+    || day > daysInMonth(year, month)
+    || hour > 23
+    || minute > 59
+    || second > 59
+  ) return null;
+
+  let offsetMinutes = 0;
+  if (offsetRaw !== 'Z') {
+    const offsetHours = Number(offsetRaw.slice(1, 3));
+    const offsetRemainder = Number(offsetRaw.slice(4, 6));
+    if (offsetHours > 14 || offsetRemainder > 59 || (offsetHours === 14 && offsetRemainder !== 0)) return null;
+    offsetMinutes = (offsetHours * 60) + offsetRemainder;
+    if (offsetRaw[0] === '-') offsetMinutes *= -1;
+  }
+
+  const milliseconds = Number((fractionRaw.slice(0, 3) || '0').padEnd(3, '0'));
+  const utc = new Date(0);
+  utc.setUTCFullYear(year, month - 1, day);
+  utc.setUTCHours(hour, minute, second, milliseconds);
+  const normalized = new Date(utc.getTime() - (offsetMinutes * 60_000));
+  try {
+    return normalized.toISOString();
+  } catch {
+    return null;
+  }
 }
 
 function normalizeProviderCreatedAt(rawField) {
@@ -169,8 +260,8 @@ function normalizeProviderCreatedAt(rawField) {
       derivedFrom: 'providerCreatedAtRaw',
     });
   }
-  const timestamp = Date.parse(rawField.value);
-  if (!Number.isFinite(timestamp)) {
+  const normalized = normalizeExplicitOffsetTimestamp(rawField.value);
+  if (!normalized) {
     return Object.freeze({
       state: 'normalization_failed',
       reasonCode: 'invalid_provider_created_at',
@@ -179,9 +270,22 @@ function normalizeProviderCreatedAt(rawField) {
   }
   return Object.freeze({
     state: 'derived',
-    value: new Date(timestamp).toISOString(),
+    value: normalized,
     derivedFrom: 'providerCreatedAtRaw',
   });
+}
+
+function assertDistinctExactTextPointers(evidence) {
+  const pointers = new Map();
+  for (const name of ['stylePromptRaw', 'lyricsTextRaw', 'lyricGenerationPromptRaw']) {
+    const item = evidence[name];
+    if (!POINTER_STATES.has(item?.state) || typeof item.pointer !== 'string') continue;
+    const prior = pointers.get(item.pointer);
+    if (prior) {
+      throw new Error(`distinct exact-text fields cannot share a source pointer: ${prior}, ${name}`);
+    }
+    pointers.set(item.pointer, name);
+  }
 }
 
 function assertProvenance(provenance) {
@@ -236,20 +340,38 @@ export function normalizeCensusObservation(input, provenance) {
   for (const name of REQUIRED_EVIDENCE) {
     if (!Object.hasOwn(input.evidence, name)) throw new Error(`missing evidence state: ${name}`);
   }
+  assertDistinctExactTextPointers(input.evidence);
 
-  const providerTrackId = normalizeEvidence('providerTrackId', input.evidence.providerTrackId, input.payload);
+  const providerTrackId = normalizeEvidence(
+    'providerTrackId',
+    input.evidence.providerTrackId,
+    input.payload,
+    { observedType: 'string' },
+  );
   const providerCreatedAtRaw = normalizeEvidence('providerCreatedAtRaw', input.evidence.providerCreatedAtRaw, input.payload);
-  const stylePromptRaw = normalizeEvidence('stylePromptRaw', input.evidence.stylePromptRaw, input.payload);
-  const lyricsTextRaw = normalizeEvidence('lyricsTextRaw', input.evidence.lyricsTextRaw, input.payload);
+  const stylePromptRaw = normalizeEvidence(
+    'stylePromptRaw',
+    input.evidence.stylePromptRaw,
+    input.payload,
+    { observedType: 'string' },
+  );
+  const lyricsTextRaw = normalizeEvidence(
+    'lyricsTextRaw',
+    input.evidence.lyricsTextRaw,
+    input.payload,
+    { observedType: 'string' },
+  );
   const lyricGenerationPromptRaw = normalizeEvidence(
     'lyricGenerationPromptRaw',
     input.evidence.lyricGenerationPromptRaw,
     input.payload,
+    { observedType: 'string' },
   );
   const parentProviderTrackId = normalizeEvidence(
     'parentProviderTrackId',
     input.evidence.parentProviderTrackId,
     input.payload,
+    { observedType: 'string' },
   );
   const audioWav = normalizeEvidence('audioWav', input.evidence.audioWav, input.payload);
 
