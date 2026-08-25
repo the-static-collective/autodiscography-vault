@@ -124,3 +124,25 @@ Phase B2C therefore remains below the 25-track gate until one human full-song WA
 - no reusable URL/auth/session material in durable output.
 
 If real WAV acquisition requires extracting reusable authentication material or reconstructing a hidden endpoint, stop. Do not widen authority to make acquisition succeed.
+
+## Census-v1 local ingest authority
+
+Census v1 does not open a provider acquisition path. It admits an operator-supplied, durable-safe local NDJSON pack and keeps the three preservation layers physically and semantically separate:
+
+```text
+local observation pack
+  -> credential/capability preflight
+  -> raw/observations/<exact-pack-sha256>.ndjson     immutable
+  -> normalized/census-v1/<raw-sha256>.ndjson       reproducible
+  -> derived interpretation                         not built
+```
+
+The raw pack is copied byte-for-byte and addressed by its SHA-256. A changed provider observation receives a different address; the prior raw pack is never updated in place.
+
+Each observation supplies explicit field evidence. An observed value points into its own raw payload with a JSON pointer. A missing value supplies a typed absence and reason code. Normalization may dereference or deterministically parse that evidence; it may not guess provider field names, substitute `observedAt` for provider creation time, infer a lyric-generation prompt from lyrics, infer a root ancestor from a missing parent, or carry an earlier value forward into a later absence.
+
+The local ingest preflight refuses explicit reusable credential fields and capability-bearing URLs before the pack is admitted. This is an admission membrane: a refused unsafe source remains outside the Vault rather than being silently redacted and mislabeled byte-exact.
+
+Normalization checkpoints raw byte offset, output byte length, and record count. On restart, any normalized bytes beyond the last durable checkpoint are truncated because they are rebuildable projection. Raw bytes are never truncated, rewritten, or repaired by the normalizer.
+
+This layer authorizes no browser storage, endpoint reconstruction, API/header interception, hidden pagination, automatic Suno navigation, 25-track media transport, or full-corpus browser capture. A future source adapter must cross its own owner gate while emitting the same durable-safe observation contract.

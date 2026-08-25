@@ -2,7 +2,7 @@
 
 Local-first preservation instrument for the Static Collective's Autodiscography corpus.
 
-**Current state: Phase B2C — one full-song WAV preservation candidate. The earlier Phase-B2 one-track browser/local membrane has a real human artwork specimen; the current gate is one real signed-in full-song WAV.**
+**Current state: Phase B2C one-WAV candidate plus a local-only Census v1 ingest engine. The real signed-in WAV remains the browser acquisition gate; Census v1 can preserve already-captured durable-safe observation packs without opening full-corpus browser authority.**
 
 The external preservation deadline recorded by the project is **September 3, 2026**. Urgency may accelerate transport work; it does not widen the trust boundary.
 
@@ -24,12 +24,17 @@ The external preservation deadline recorded by the project is **September 3, 202
 - optional durable `requestDescriptorSha256`: preserved when an honest request descriptor exists, omitted rather than fabricated when the browser-download witness has none;
 - a temporary Windows handoff that builds a copyable `pilot:admit` command from safe local/evidence fields and an operator-selected Vault root;
 - an external drive may be the Node-side Vault root without granting the browser direct filesystem authority to that drive;
+- content-addressed, immutable raw NDJSON census-pack admission before normalization;
+- versioned `census-v1` normalization with exact raw-record byte provenance;
+- explicit field evidence for provider creation time, exact style prompt, exact lyrics, original lyric-generation prompt, parent, and WAV availability;
+- typed negative space that keeps `known_null`, `not_observed`, `not_exposed`, `unavailable`, `refused`, `failed_to_fetch`, `artifact_known_bytes_unavailable`, and `historically_observed_now_missing` distinct;
+- checkpointed normalization that safely truncates uncheckpointed derived tail bytes and resumes without duplicating raw history;
 - explicit verified/incomplete/refusal states and adversarial tests for corruption, torn journals, secret-shaped material, permission creep, and WAV mislabeling.
 
 ## What remains closed
 
 - **no 25-track transport button**;
-- no full-corpus acquisition;
+- no full-corpus **browser acquisition** or hidden provider endpoint adapter;
 - no stems or Studio project export acquisition in B2C;
 - no hidden WAV endpoint reconstruction;
 - no cookies/session/token extraction;
@@ -47,6 +52,16 @@ npm ci
 npm test
 npm run synthetic:pilot
 ```
+
+For a local durable-safe observation pack, Census v1 is:
+
+```bash
+npm run census:ingest -- \
+  --input <observations.ndjson> \
+  --vault-root <local-or-external-drive-vault-root>
+```
+
+The command first admits the exact input pack under its content hash, then builds a reproducible normalized projection. A later interpretation layer is deliberately not built. See [`docs/CENSUS-RUNBOOK.md`](docs/CENSUS-RUNBOOK.md).
 
 `pilot:admit` accepts local bytes and non-secret evidence only. It has no provider transport-URL argument. For a direct observed transport, `--request-descriptor-sha256` remains available. For a user-triggered WAV witness with no honest request descriptor, that flag is intentionally omitted.
 
@@ -78,10 +93,13 @@ Read before the human specimen:
 - [`docs/NETWORK-BEHAVIOR.md`](docs/NETWORK-BEHAVIOR.md)
 - [`docs/PILOT-RUNBOOK.md`](docs/PILOT-RUNBOOK.md)
 - [`docs/CORPUS-OS-HANDOFF.md`](docs/CORPUS-OS-HANDOFF.md)
+- [`docs/CENSUS-RUNBOOK.md`](docs/CENSUS-RUNBOOK.md)
 - [`SECURITY.md`](SECURITY.md)
 
 B2C design: [`docs/superpowers/specs/2026-08-15-phase-b2c-wav-preservation-design.md`](docs/superpowers/specs/2026-08-15-phase-b2c-wav-preservation-design.md)
 
 B2C implementation plan: [`docs/superpowers/plans/2026-08-15-phase-b2c-wav-preservation.md`](docs/superpowers/plans/2026-08-15-phase-b2c-wav-preservation.md)
 
-Tracking: [Vault issue #8](https://github.com/the-static-collective/autodiscography-vault/issues/8), downstream preservation program: [Corpus OS #4](https://github.com/the-static-collective/corpus-os/issues/4).
+Census v1 design: [`docs/superpowers/specs/2026-08-24-vault-census-v1-design.md`](docs/superpowers/specs/2026-08-24-vault-census-v1-design.md)
+
+Tracking: [Vault issue #8](https://github.com/the-static-collective/autodiscography-vault/issues/8), [Vault issue #11](https://github.com/the-static-collective/autodiscography-vault/issues/11), [Vault issue #12](https://github.com/the-static-collective/autodiscography-vault/issues/12), downstream preservation program: [Corpus OS #4](https://github.com/the-static-collective/corpus-os/issues/4).
