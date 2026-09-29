@@ -9,10 +9,21 @@
 <body>
   <main>
     <header>
-      <p class="eyebrow">Autodiscography Vault · Phase B2C</p>
-      <h1>Live witness + one-track WAV pilot</h1>
-      <p class="boundary">LIVE WITNESS BY DEFAULT — browser transport is optional, user-granted, and limited to one selected track. Cookie/session export remains forbidden.</p>
+      <p class="eyebrow">Autodiscography Vault · Phase B2C + Census v1</p>
+      <h1>Live witness + resumable UI census</h1>
+      <p class="boundary">LIVE WITNESS BY DEFAULT — browser transport is optional and user-granted. Cookie/session export remains forbidden.</p>
     </header>
+
+    <section class="gate" aria-labelledby="census-scroll-heading">
+      <h2 id="census-scroll-heading">Resumable library auto-scroll</h2>
+      <p>From your signed-in Suno library, start an ordinary-DOM census. Vault waits for bounded rendered-state stability, saves one immutable JSON round with its exact checkpoint, then applies that round's one-shot bound scroll action.</p>
+      <p>Stopping or crashing is safe: select the last completed round file to replay from its checkpoint. Stable IDs are deduplicated only in checkpoint state; raw re-observations remain intact.</p>
+      <label for="census-scroll-resume">Optional completed round file to resume</label>
+      <input id="census-scroll-resume" type="file" accept="application/json,.json">
+      <button id="census-scroll-start" type="button">Start auto-scroll census</button>
+      <button id="census-scroll-stop" type="button" disabled>Stop after last saved round</button>
+      <p id="census-scroll-status" role="status" aria-live="polite">Not started. ui_exhausted means the observed UI stopped yielding cards; it is not provider completeness.</p>
+    </section>
 
     <section class="gate" aria-labelledby="live-heading">
       <h2 id="live-heading">25-track live proposal</h2>
@@ -29,7 +40,7 @@
       <button id="enable-transport" type="button">Enable pilot transport</button>
       <p id="transport-status" role="status" aria-live="polite">Transport locked. Observation remains available.</p>
       <p><strong>WAV gate:</strong> after transport is enabled, choose <strong>Witness one WAV</strong> on exactly one observed track, then use Suno's normal Download → WAV action.</p>
-      <button id="acquire-pilot" type="button" disabled>Acquire 25-track pilot — 25-track transport remains locked pending one-track WAV witness</button>
+      <button id="acquire-pilot" type="button" disabled>Acquire 25-track pilot — 25-track media transport remains locked pending separate bounded design</button>
     </section>
 
     <section class="gate" aria-labelledby="admission-heading">

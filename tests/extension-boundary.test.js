@@ -22,6 +22,8 @@ test('MV3 Phase B2C keeps transport optional and Suno witness permanent', async 
   ]);
   assert.deepEqual(manifest.content_scripts[0].js, [
     'src/provider/suno/live-observer.js',
+    'src/provider/suno/census-card-observer.js',
+    'src/provider/suno/census-scroll.js',
     'src/provider/suno/content-script.js',
   ]);
 
@@ -49,7 +51,9 @@ test('fixture adapter contains no network or browser-session primitive', async (
 test('provider witness remains observation-only after Phase B2 transport is added to extension page', async () => {
   const contentScript = await text('../extension/src/provider/suno/content-script.js');
   const observer = await text('../extension/src/provider/suno/live-observer.js');
-  const source = `${contentScript}\n${observer}`;
+  const censusCardObserver = await text('../extension/src/provider/suno/census-card-observer.js');
+  const censusScroll = await text('../extension/src/provider/suno/census-scroll.js');
+  const source = `${contentScript}\n${observer}\n${censusCardObserver}\n${censusScroll}`;
   assert.equal(/\bfetch\s*\(|XMLHttpRequest|WebSocket|chrome\.cookies|document\.cookie|webRequest|chrome\.downloads/i.test(source), false);
 });
 
