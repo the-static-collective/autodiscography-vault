@@ -1,6 +1,7 @@
 import { createReadStream } from 'node:fs';
 import { createServer } from 'node:http';
 import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import {
   parseAddress,
@@ -225,7 +226,7 @@ export function createResolverServer(options) {
   });
 }
 
-const isCli = process.argv[1] && resolve(process.argv[1]) === resolve(new URL(import.meta.url).pathname);
+const isCli = process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
 if (isCli) {
   try {
     const options = parseArgs(process.argv.slice(2));
