@@ -85,3 +85,36 @@ B2C design: [`docs/superpowers/specs/2026-08-15-phase-b2c-wav-preservation-desig
 B2C implementation plan: [`docs/superpowers/plans/2026-08-15-phase-b2c-wav-preservation.md`](docs/superpowers/plans/2026-08-15-phase-b2c-wav-preservation.md)
 
 Tracking: [Vault issue #8](https://github.com/the-static-collective/autodiscography-vault/issues/8), downstream preservation program: [Corpus OS #4](https://github.com/the-static-collective/corpus-os/issues/4).
+
+
+## Read-only content-address media resolver
+
+The experimental resolver on `feat/readonly-media-resolver` exposes already-admitted local audio by exact SHA-256 address without adding a general file server.
+
+```text
+sha256:<digest>
+→ verified acquisition receipt
+→ safe Vault-relative path
+→ exact local byte re-verification
+→ read-only loopback media stream
+```
+
+Run:
+
+```bash
+npm run resolver:serve -- \
+  --vault-root /path/to/Autodiscography-Vault \
+  --port 13703 \
+  --room-origin http://127.0.0.1:13702
+```
+
+The server binds only to `127.0.0.1`, supports bounded descriptor lookup and read-only audio streaming with single-range seeking, and refuses unknown/tampered/ambiguous assets.
+
+```text
+ADDRESS != AUTHORITY
+RECEIPT != BYTES
+RESOLUTION REQUIRES BYTE REVERIFICATION
+PLAYABLE != ADMITTED
+```
+
+See [Read-only media resolver v0](docs/READONLY-MEDIA-RESOLVER-V0.md).
