@@ -15,7 +15,7 @@ async function localAsset(root, sourceRelativePath) {
   if(typeof sourceRelativePath!=='string'||!sourceRelativePath||
      isAbsolute(sourceRelativePath)||sourceRelativePath.includes('\\')||
      sourceRelativePath.split('/').some(segment=>!segment||segment==='.'||segment==='..')||
-     sourceRelativePath.includes('\\0')) deny('unsafe asset path');
+     sourceRelativePath.includes(String.fromCharCode(0))) deny('unsafe asset path');
   const canonicalRoot=await realpath(root);
   const target=resolve(canonicalRoot,sourceRelativePath);
   const contained=relative(canonicalRoot,target);
