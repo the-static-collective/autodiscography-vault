@@ -52,3 +52,9 @@ A `relation` may be `cover_of`, `extend_of`, or `remix_of`, with `targetProvider
 - A future source-supported bulk metadata export may reuse this importer; it must first carry its own provenance and collection scope.
 
 See `README.md`, `SECURITY.md`, and `docs/TRUST-BOUNDARY.md` for the existing preservation law.
+
+## Disputed ancestry and corrected observations
+
+A UI-reported relationship is **a claim, not a verified genealogy edge**. Before projecting it as confirmed, cross-check the selected song's canonical ID, its own direct detail page, the purported parent's canonical ID, and independently observed creation chronology when available. A source displayed in a sidebar, neighboring panel, or stale detail view must not be attributed to the active track. If the direct pages fail to corroborate an earlier relationship report, or timestamps contradict its direction, mark the edge **disputed / not established**, not confirmed.
+
+The preservation layer must **not overwrite** a previous mistaken observation: admit a corrected specimen with a new content hash, preserve the original as an error witness, and create a separate provenance-correction receipt privately linking old/new hashes and describing the disagreement. Do not put private song IDs, titles, lyrics, or account data in this public repo. A `relation: null` means no established link in the current observation, not that no relationship can exist.
