@@ -41,7 +41,7 @@ Top-level required keys:
 
 The actual input must contain at least one record. Each record requires: `rank` (strictly increasing observed UI rank), `providerTrackId` (canonical UUID), `sourceUrl` (exact `https://suno.com/song/<ID>`), `title`, `durationSeconds`, `model`, `ageLabel` (relative string or null), `visibility` (`published` / `unpublished` / `unknown`), `kindTag` (`cover` / `extend` / `remix` / null), `relation` (null or explicitly witnessed), and `evidenceSurface` (`card-preview` or `detail-panel`).
 
-A `relation` may be `cover_of`, `extend_of`, or `remix_of`, with `targetProviderTrackId`, `targetSourceUrl`, and `evidenceSurface:"detail-panel"`. Null does not mean "no parent." Repeated titles are distinct tracks when provider IDs differ. Relative ages are **not** converted into invented exact dates. Adjacency and shared duration do **not** establish sibling generations.
+The v1 importer **refuses all non-null `relation` entries**, even ones labeled `detail-panel`: an agent-generated description alone cannot confirm a source-specific provider link. Audit proposed `cover_of`, `extend_of`, and `remix_of` links separately with `packages/lineage-audit/index.js` and the witness protocol in `docs/ARCHAEOLOGIST-PROVENANCE-PROTOCOL.md`. Null means *unknown*, not "no parent." Repeated titles are distinct tracks when provider IDs differ. Relative ages are **not** converted into invented exact dates. Adjacency and shared duration do **not** establish sibling generations.
 
 ## Safety and accuracy
 
@@ -58,3 +58,5 @@ See `README.md`, `SECURITY.md`, and `docs/TRUST-BOUNDARY.md` for the existing pr
 A UI-reported relationship is **a claim, not a verified genealogy edge**. Before projecting it as confirmed, cross-check the selected song's canonical ID, its own direct detail page, the purported parent's canonical ID, and independently observed creation chronology when available. A source displayed in a sidebar, neighboring panel, or stale detail view must not be attributed to the active track. If the direct pages fail to corroborate an earlier relationship report, or timestamps contradict its direction, mark the edge **disputed / not established**, not confirmed.
 
 The preservation layer must **not overwrite** a previous mistaken observation: admit a corrected specimen with a new content hash, preserve the original as an error witness, and create a separate provenance-correction receipt privately linking old/new hashes and describing the disagreement. Do not put private song IDs, titles, lyrics, or account data in this public repo. A `relation: null` means no established link in the current observation, not that no relationship can exist.
+
+Detailed selected-song evidence and fail-closed evaluation: [`docs/ARCHAEOLOGIST-PROVENANCE-PROTOCOL.md`](ARCHAEOLOGIST-PROVENANCE-PROTOCOL.md).
