@@ -43,12 +43,12 @@ export function validateObservationBundle(b){
     if(!['published','unpublished','unknown'].includes(r.visibility))refuse('visibility');
     if(![null,'cover','extend','remix'].includes(r.kindTag))refuse('type');
     if(!['card-preview','detail-panel'].includes(r.evidenceSurface))refuse('surface');
+    // v1 observations keep claims separate from verified genealogy. Even a
+    // "detail-panel" string from an AI collector is not an authenticated link.
+    // Admit the observed track as relation:null and audit any reported edge
+    // separately through lineage-audit; never promote an agent report here.
     if(r.relation!==null){
-      exact(r.relation,REL);
-      if(!['cover_of','extend_of','remix_of'].includes(r.relation.kind))refuse('relation kind');
-      id(r.relation.targetProviderTrackId);
-      url(r.relation.targetProviderTrackId,r.relation.targetSourceUrl);
-      if(r.relation.evidenceSurface!=='detail-panel')refuse('unwitnessed relation');
+      refuse('lineage claim is not a verified relation: preserve separately and audit');
     }
   }
   return b;
