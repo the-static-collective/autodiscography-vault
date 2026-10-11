@@ -28,11 +28,11 @@ test('reject duplicate IDs with distinct titles',()=>{
   b.records.push({...b.records[0],rank:2,title:'different'});
   assert.throws(()=>validateObservationBundle(b),/duplicate/);
 });
-test('a relation requires detail-panel evidence',()=>{
+test('an agent report cannot inject a verified relation, even when labeled detail-panel',()=>{
   const b=specimen();
   b.records[0].relation={kind:'cover_of',targetProviderTrackId:PARENT,
-    targetSourceUrl:'https://suno.com/song/'+PARENT,evidenceSurface:'card-preview'};
-  assert.throws(()=>validateObservationBundle(b),/unwitnessed/);
+    targetSourceUrl:'https://suno.com/song/'+PARENT,evidenceSurface:'detail-panel'};
+  assert.throws(()=>validateObservationBundle(b),/lineage claim is not a verified relation/);
 });
 test('private local admission hashes, journals, resumes and detects tampering',async()=>{
   const tmp=await mkdtemp(join(tmpdir(),'vault-meta-'));
